@@ -1,15 +1,15 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import { Geist } from 'next/font/google'
-import { ClerkProvider } from "@clerk/nextjs"
+import { Inter } from 'next/font/google'
+import { Providers } from './providers'
 
-const geist = Geist({
+const inter = Inter({
   subsets: ['latin'],
 })
 
 export const metadata: Metadata = {
   title: 'Makao Rental Management System',
-  description: 'A comprehensive rental property management system for Kenyan landlords',
+  description: 'Efficiently manage your rental properties',
 }
 
 export default function RootLayout({
@@ -18,10 +18,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={geist.className}>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   )
 }

@@ -56,26 +56,34 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-background border-r border-border">
-      <div className="p-4">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold">Makao</h1>
-          <p className="text-sm text-muted-foreground">Property Management System</p>
+    <aside className={cn("w-64", "bg-background", "border-r", "border-border")}>
+      <div className={cn("p-4")}>
+        <div className={cn("mb-6")}>
+          <h1 className={cn("text-xl", "font-bold")}>Makao</h1>
+          <p className={cn("text-sm", "text-muted-foreground")}>Property Management System</p>
         </div>
 
-        <nav className="space-y-1">
+        <nav className={cn("space-y-1")}>
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex",
+                "items-center",
+                "gap-3",
+                "rounded-md",
+                "px-3",
+                "py-2",
+                "text-sm",
+                "font-medium",
+                "transition-colors",
                 pathname === item.href
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-primary/5"
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className={cn("h-4", "w-4")} />
               {item.label}
             </Link>
           ))}

@@ -1,16 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import MainLayout from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Users, Receipt, TrendingUp } from 'lucide-react';
-import { redirect } from "next/navigation";
 
-export default async function DashboardPage() {
-  const { userId } = auth();
-  
-  if (!userId) {
-    redirect("/sign-in");
-  }
-
+export default function DashboardPage() {
   const stats = [
     {
       title: 'Total Properties',
@@ -50,7 +42,7 @@ export default async function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">
                   {stat.title}
                 </CardTitle>
-                <stat.icon className="h-4 w-4 text-gray-500" />
+                <stat.icon className="h-5 w-5 text-gray-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>

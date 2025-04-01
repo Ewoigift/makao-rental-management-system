@@ -1,35 +1,41 @@
-import { Bell, Search } from 'lucide-react';
-import { Input } from "@/components/ui/input";
-import { UserButton, useUser } from "@clerk/nextjs";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Building2, Users, Receipt, Settings } from "lucide-react";
 
-const Header = () => {
-  const { user } = useUser();
-
+export default function Header() {
   return (
-    <header className="h-16 border-b bg-white">
-      <div className="flex items-center justify-between h-full px-6">
-        <div className="w-96">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search..."
-              className="pl-8"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="relative p-2 rounded-full hover:bg-gray-100">
-            <Bell className="h-5 w-5 text-gray-600" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium">{user?.fullName || 'Guest'}</span>
-            <UserButton afterSignOutUrl="/" />
-          </div>
-        </div>
+    <header className="border-b">
+      <div className="flex h-16 items-center px-4">
+        <Link href="/dashboard" className="font-semibold text-lg">
+          Makao RMS
+        </Link>
+        <nav className="flex items-center space-x-4 lg:space-x-6 mx-6">
+          <Link href="/properties" className="text-sm font-medium transition-colors hover:text-primary">
+            <Button variant="ghost" className="flex items-center">
+              <Building2 className="h-4 w-4 mr-2" />
+              Properties
+            </Button>
+          </Link>
+          <Link href="/tenants" className="text-sm font-medium transition-colors hover:text-primary">
+            <Button variant="ghost" className="flex items-center">
+              <Users className="h-4 w-4 mr-2" />
+              Tenants
+            </Button>
+          </Link>
+          <Link href="/payments" className="text-sm font-medium transition-colors hover:text-primary">
+            <Button variant="ghost" className="flex items-center">
+              <Receipt className="h-4 w-4 mr-2" />
+              Payments
+            </Button>
+          </Link>
+          <Link href="/settings" className="text-sm font-medium transition-colors hover:text-primary">
+            <Button variant="ghost" className="flex items-center">
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+          </Link>
+        </nav>
       </div>
     </header>
   );
-};
-
-export default Header;
+}
