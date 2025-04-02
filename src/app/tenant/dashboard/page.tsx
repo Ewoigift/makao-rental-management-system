@@ -1,0 +1,271 @@
+import MainLayout from '@/components/layout/main-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Home, Receipt, Tool, Bell, Calendar, FileText, CreditCard } from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
+
+export default function TenantDashboardPage() {
+  // Sample data - in a real app, this would come from the database
+  const tenantInfo = {
+    name: 'John Doe',
+    unit: 'A101',
+    property: 'Sunset Apartments',
+    leaseEnd: '2025-12-31',
+    rentAmount: 'KES 25,000',
+    nextPaymentDue: '2025-05-01',
+    balance: 'KES 0',
+  };
+
+  // Recent notifications
+  const notifications = [
+    { type: 'payment', title: 'Rent Payment Confirmed', date: '2025-04-01', read: true },
+    { type: 'maintenance', title: 'Maintenance Request Updated', date: '2025-03-28', read: false },
+    { type: 'announcement', title: 'Water Shutdown Notice', date: '2025-03-25', read: true },
+  ];
+
+  // Recent maintenance requests
+  const maintenanceRequests = [
+    { id: 'MR-2025-042', issue: 'Leaking Faucet', status: 'in_progress', date: '2025-03-28' },
+    { id: 'MR-2025-036', issue: 'Electrical Outlet', status: 'completed', date: '2025-03-15' },
+  ];
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Welcome, {tenantInfo.name}</h1>
+            <p className="text-gray-500">
+              {tenantInfo.property} • Unit {tenantInfo.unit}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild>
+              <Link href="/tenant/payments/make">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Make Payment
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/tenant/maintenance/new">
+                <Tool className="mr-2 h-4 w-4" />
+                Report Issue
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Payment Summary Card */}
+        <Card className="overflow-hidden border-t-4 border-t-blue-500">
+          <CardHeader className="bg-blue-50 pb-2">
+            <CardTitle className="flex items-center text-blue-700">
+              <Receipt className="mr-2 h-5 w-5" />
+              Payment Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">Monthly Rent</p>
+                <p className="text-xl font-bold">{tenantInfo.rentAmount}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Next Payment Due</p>
+                <p className="text-xl font-bold">{tenantInfo.nextPaymentDue}</p>
+                <p className="text-xs text-gray-500">
+                  {new Date(tenantInfo.nextPaymentDue) < new Date() 
+                    ? 'Overdue' 
+                    : `${Math.ceil((new Date(tenantInfo.nextPaymentDue).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Current Balance</p>
+                <p className="text-xl font-bold">{tenantInfo.balance}</p>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="bg-gray-50 flex justify-between">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/tenant/payments/history">Payment History</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/tenant/payments/make">Pay Now</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Quick Actions */}
+        <h2 className="text-xl font-semibold mt-8">Quick Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <div className="bg-blue-100 p-3 rounded-full mb-3">
+                <FileText className="h-6 w-6 text-blue-700" />
+              </div>
+              <h3 className="font-medium">View Lease</h3>
+              <p className="text-sm text-gray-500 mb-3">Expires: {tenantInfo.leaseEnd}</p>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link href="/tenant/lease">View Details</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <div className="bg-green-100 p-3 rounded-full mb-3">
+                <Tool className="h-6 w-6 text-green-700" />
+              </div>
+              <h3 className="font-medium">Maintenance</h3>
+              <p className="text-sm text-gray-500 mb-3">Report issues or check status</p>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link href="/tenant/maintenance">View Requests</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <div className="bg-amber-100 p-3 rounded-full mb-3">
+                <Bell className="h-6 w-6 text-amber-700" />
+              </div>
+              <h3 className="font-medium">Notifications</h3>
+              <p className="text-sm text-gray-500 mb-3">
+                {notifications.filter(n => !n.read).length} unread messages
+              </p>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link href="/tenant/notifications">View All</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex flex-col items-center text-center">
+              <div className="bg-purple-100 p-3 rounded-full mb-3">
+                <Home className="h-6 w-6 text-purple-700" />
+              </div>
+              <h3 className="font-medium">My Unit</h3>
+              <p className="text-sm text-gray-500 mb-3">View details about your unit</p>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link href="/tenant/unit">View Details</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity and Notifications */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+          {/* Recent Maintenance Requests */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Recent Maintenance Requests</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {maintenanceRequests.length > 0 ? (
+                <div className="divide-y">
+                  {maintenanceRequests.map((request, index) => (
+                    <div key={index} className="p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">{request.issue}</p>
+                          <p className="text-sm text-gray-500">ID: {request.id}</p>
+                        </div>
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                          ${request.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                          request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                          'bg-blue-100 text-blue-800'}`}>
+                          {request.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Submitted: {request.date}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="p-4 text-center text-gray-500">No recent maintenance requests</p>
+              )}
+            </CardContent>
+            <CardFooter className="bg-gray-50">
+              <Button variant="ghost" size="sm" className="w-full" asChild>
+                <Link href="/tenant/maintenance">View All Requests</Link>
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Recent Notifications */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Recent Notifications</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {notifications.length > 0 ? (
+                <div className="divide-y">
+                  {notifications.map((notification, index) => (
+                    <div key={index} className={`p-4 hover:bg-gray-50 ${!notification.read ? 'bg-blue-50' : ''}`}>
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center">
+                          {!notification.read && (
+                            <span className="h-2 w-2 bg-blue-600 rounded-full mr-2"></span>
+                          )}
+                          <p className="font-medium">{notification.title}</p>
+                        </div>
+                        <p className="text-xs text-gray-500">{notification.date}</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 capitalize">{notification.type}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="p-4 text-center text-gray-500">No recent notifications</p>
+              )}
+            </CardContent>
+            <CardFooter className="bg-gray-50">
+              <Button variant="ghost" size="sm" className="w-full" asChild>
+                <Link href="/tenant/notifications">View All Notifications</Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+
+        {/* Property Information */}
+        <Card className="mt-8">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Property Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="relative h-48 md:w-1/3 w-full">
+                <Image 
+                  src="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?q=80&w=800"
+                  alt={tenantInfo.property}
+                  fill
+                  className="object-cover rounded-md"
+                  sizes="100vw"
+                  unoptimized
+                />
+              </div>
+              <div className="md:w-2/3">
+                <h3 className="text-xl font-bold">{tenantInfo.property}</h3>
+                <p className="text-gray-500 mb-4">123 Main Street, Nairobi, Kenya</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium">Contact Information</h4>
+                    <p className="text-sm text-gray-500">Property Manager: Jane Smith</p>
+                    <p className="text-sm text-gray-500">Email: manager@makao.com</p>
+                    <p className="text-sm text-gray-500">Phone: +254 712 345 678</p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Emergency Contacts</h4>
+                    <p className="text-sm text-gray-500">Security: +254 712 345 679</p>
+                    <p className="text-sm text-gray-500">Maintenance: +254 712 345 680</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </MainLayout>
+  );
+}
