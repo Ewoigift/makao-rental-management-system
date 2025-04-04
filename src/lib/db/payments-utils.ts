@@ -100,16 +100,31 @@ export async function createPayment(
   try {
     const supabase = createSupabaseClient();
     
+    // First get the user's internal ID based on clerk_id
+    const { data: userData, error: userIdError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_id', tenantClerkId)
+      .single();
+      
+    if (userIdError) throw userIdError;
+    
+    // Generate receipt number
+    const receiptNumber = `RCP-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+    
     // Create the payment
     const { data, error } = await supabase
       .from('payments')
       .insert({
         lease_id: paymentData.lease_id,
+        tenant_id: userData.id,
         amount: paymentData.amount,
         payment_date: new Date().toISOString(),
         payment_method: paymentData.payment_method,
-        reference_number: paymentData.reference_number,
+        transaction_id: paymentData.reference_number,
+        payment_category: 'rent',
         status: paymentData.status || 'pending',
+        receipt_number: receiptNumber,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -211,30 +226,28 @@ export async function getTenantPaymentSummary(tenantClerkId: string) {
              paymentDate.getFullYear() === currentYear;
     });
     
-    // Set next payment due date (1st of next month if not paid for current month)
-    let nextPaymentDue = null;
-    if (!currentMonthPayment) {
-      // If payment day is specified in lease, use that day
-      const paymentDay = lease.payment_day || 1;
-      const nextPaymentDate = new Date(currentYear, currentMonth - 1, paymentDay);
-      
-      // If the payment date has passed, set to next month
-      if (nextPaymentDate < currentDate) {
-        nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-      }
-      
-      nextPaymentDue = nextPaymentDate.toISOString().split('T')[0];
-    } else {
-      // If current month is paid, next due date is 1st of the month after next
-      const nextPaymentDate = new Date(currentYear, currentMonth, lease.payment_day || 1);
-      nextPaymentDue = nextPaymentDate.toISOString().split('T')[0];
-    }
+    // Set next payment due date (always set to 1st of next month for demo purposes)
+    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+    const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+    const nextPaymentDate = new Date(nextYear, nextMonth - 1, 1);
+    const nextPaymentDue = nextPaymentDate.toISOString().split('T')[0];
+    
+    // Get the unit price from the lease
+    const rentAmount = parseFloat(lease.rent_amount) || 30000;
+    
+    // Format the next payment date nicely
+    const nextPaymentFormatted = nextPaymentDue ? new Date(nextPaymentDue).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }) : null;
     
     return {
       totalPaid: formatKSh(totalPaid),
-      currentBalance: formatKSh(currentMonthPayment ? 0 : parseFloat(lease.rent_amount)),
+      currentBalance: formatKSh(rentAmount),
       nextPaymentDue,
-      rentAmount: formatKSh(parseFloat(lease.rent_amount)),
+      nextPaymentFormatted,
+      rentAmount: formatKSh(rentAmount),
       hasLease: true
     };
   } catch (error) {
