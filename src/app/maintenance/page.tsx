@@ -80,6 +80,17 @@ export default function MaintenancePage() {
   const [updateNotes, setUpdateNotes] = useState('');
   const [processingAction, setProcessingAction] = useState(false);
   
+  // Statistics states
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+    cancelled: 0,
+    avgResolutionTime: 0,
+    urgentCount: 0
+  });
+  
   const { user } = useUser();
   
   // Fetch maintenance requests using server-side API endpoint
@@ -159,6 +170,52 @@ export default function MaintenancePage() {
     setFilteredRequests(filtered);
   }, [searchTerm, statusFilter, maintenanceRequests]);
   
+  // Calculate statistics based on maintenance requests
+  useEffect(() => {
+    if (maintenanceRequests.length > 0) {
+      // Count by status
+      const pending = maintenanceRequests.filter(req => req.status === 'pending').length;
+      const inProgress = maintenanceRequests.filter(req => req.status === 'in_progress').length;
+      const completed = maintenanceRequests.filter(req => req.status === 'completed').length;
+      const cancelled = maintenanceRequests.filter(req => req.status === 'cancelled').length;
+      
+      // Count high priority/urgent requests
+      const urgentCount = maintenanceRequests.filter(req => 
+        req.priority === 'high' || req.priority === 'urgent'
+      ).length;
+      
+      // Calculate average resolution time for completed requests (in days)
+      let totalResolutionDays = 0;
+      const completedWithDates = maintenanceRequests.filter(req => 
+        req.status === 'completed' && req.created_at && req.completed_at
+      );
+      
+      if (completedWithDates.length > 0) {
+        completedWithDates.forEach(req => {
+          const createdDate = new Date(req.created_at);
+          const completedDate = new Date(req.completed_at!);
+          const diffTime = Math.abs(completedDate.getTime() - createdDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          totalResolutionDays += diffDays;
+        });
+      }
+      
+      const avgResolutionTime = completedWithDates.length > 0 
+        ? Math.round(totalResolutionDays / completedWithDates.length) 
+        : 0;
+      
+      setStatistics({
+        total: maintenanceRequests.length,
+        pending,
+        inProgress,
+        completed,
+        cancelled,
+        avgResolutionTime,
+        urgentCount
+      });
+    }
+  }, [maintenanceRequests]);
+  
   // Handle updating maintenance request status
   const handleUpdateStatus = async () => {
     if (!selectedRequest || !updateStatus) return;
@@ -190,6 +247,65 @@ export default function MaintenancePage() {
       <div className="container mx-auto py-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Maintenance Management</h1>
+          <Button className="bg-primary hover:bg-primary/90">
+            <Plus className="mr-2 h-4 w-4" /> New Request
+          </Button>
+        </div>
+        
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-blue-800">Total Requests</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Wrench className="h-8 w-8 text-blue-600 mr-2" />
+                <span className="text-3xl font-bold text-blue-800">{statistics.total}</span>
+              </div>
+              <p className="text-xs text-blue-600 mt-1">All maintenance requests</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-amber-800">Pending</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <AlertCircle className="h-8 w-8 text-amber-600 mr-2" />
+                <span className="text-3xl font-bold text-amber-800">{statistics.pending}</span>
+              </div>
+              <p className="text-xs text-amber-600 mt-1">Waiting for action</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-green-800">Completed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <CheckCircle className="h-8 w-8 text-green-600 mr-2" />
+                <span className="text-3xl font-bold text-green-800">{statistics.completed}</span>
+              </div>
+              <p className="text-xs text-green-600 mt-1">Successfully resolved</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-purple-800">Avg. Resolution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Calendar className="h-8 w-8 text-purple-600 mr-2" />
+                <span className="text-3xl font-bold text-purple-800">{statistics.avgResolutionTime}</span>
+                <span className="text-md ml-1 text-purple-700">days</span>
+              </div>
+              <p className="text-xs text-purple-600 mt-1">Average time to resolve</p>
+            </CardContent>
+          </Card>
         </div>
         
         <Card className="mb-6">
@@ -322,103 +438,189 @@ export default function MaintenancePage() {
         
         {/* View Details Dialog */}
         <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Maintenance Request Details</DialogTitle>
+              <DialogTitle className="text-xl flex items-center">
+                <Wrench className="h-5 w-5 mr-2 text-primary" />
+                Maintenance Request Details
+              </DialogTitle>
             </DialogHeader>
             
             {selectedRequest && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-lg">{selectedRequest.title}</h3>
-                  <Badge className="mt-1">{selectedRequest.status}</Badge>
+              <div className="space-y-5">
+                <div className="border-b pb-4">
+                  <h3 className="font-semibold text-lg mb-2">{selectedRequest.title}</h3>
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(selectedRequest.status)}
+                    
+                    {selectedRequest.priority && (
+                      <Badge variant="outline" className={`
+                        ${selectedRequest.priority === 'urgent' ? 'bg-red-100 text-red-800' : ''}
+                        ${selectedRequest.priority === 'high' ? 'bg-orange-100 text-orange-800' : ''}
+                        ${selectedRequest.priority === 'medium' ? 'bg-blue-100 text-blue-800' : ''}
+                        ${selectedRequest.priority === 'low' ? 'bg-green-100 text-green-800' : ''}
+                      `}>
+                        {selectedRequest.priority.charAt(0).toUpperCase() + selectedRequest.priority.slice(1)} Priority
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1">
                     <Label className="text-xs text-gray-500">Property/Unit</Label>
                     <p className="font-medium">
                       {selectedRequest.unit?.property?.name ? `${selectedRequest.unit.property.name}, ` : ''}
                       Unit {selectedRequest.unit?.unit_number || 'N/A'}
                     </p>
                   </div>
-                  <div>
-                    <Label className="text-xs text-gray-500">Date Submitted</Label>
-                    <p className="font-medium">{formatDate(selectedRequest.created_at)}</p>
+                  
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-500">Status Timeline</Label>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span>Created:</span>
+                        <span className="font-medium">{formatDate(selectedRequest.created_at)}</span>
+                      </div>
+                      {selectedRequest.updated_at && selectedRequest.updated_at !== selectedRequest.created_at && (
+                        <div className="flex justify-between">
+                          <span>Last Updated:</span>
+                          <span className="font-medium">{formatDate(selectedRequest.updated_at)}</span>
+                        </div>
+                      )}
+                      {selectedRequest.completed_at && (
+                        <div className="flex justify-between">
+                          <span>Completed:</span>
+                          <span className="font-medium">{formatDate(selectedRequest.completed_at)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 
-                <div>
-                  <Label className="text-xs text-gray-500">Description</Label>
-                  <p className="mt-1">{selectedRequest.description}</p>
+                <div className="space-y-1 border-t pt-4">
+                  <Label className="text-sm font-medium">Description</Label>
+                  <div className="bg-gray-50 p-3 rounded-md whitespace-pre-wrap">{selectedRequest.description}</div>
                 </div>
               </div>
             )}
             
-            <DialogFooter>
+            <DialogFooter className="gap-2 mt-4">
               <Button variant="outline" onClick={() => setIsViewDetailsDialogOpen(false)}>
                 Close
               </Button>
+              {selectedRequest && selectedRequest.status !== 'completed' && selectedRequest.status !== 'cancelled' && (
+                <Button 
+                  onClick={() => {
+                    setSelectedRequest(selectedRequest);
+                    setUpdateStatus(selectedRequest.status);
+                    setIsViewDetailsDialogOpen(false);
+                    setIsUpdateDialogOpen(true);
+                  }}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <PenToolIcon className="mr-2 h-4 w-4" /> Update Status
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
         
         {/* Update Status Dialog */}
         <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Update Maintenance Status</DialogTitle>
+              <DialogTitle className="text-xl flex items-center">
+                <PenToolIcon className="h-5 w-5 mr-2 text-blue-600" />
+                Update Maintenance Status
+              </DialogTitle>
               <DialogDescription>
-                Change the status of this maintenance request.
+                Change the status of this maintenance request and add notes.
               </DialogDescription>
             </DialogHeader>
             
             {selectedRequest && (
               <div className="space-y-4 py-2">
-                <div>
-                  <h3 className="font-semibold">{selectedRequest.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {selectedRequest.description}
-                  </p>
+                <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                  <h3 className="font-semibold text-blue-900">{selectedRequest.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-blue-700">
+                      Unit {selectedRequest.unit?.unit_number || 'N/A'}
+                    </p>
+                    {getStatusBadge(selectedRequest.status)}
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <select
-                    id="status"
-                    className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background"
-                    value={updateStatus}
-                    onChange={(e) => setUpdateStatus(e.target.value)}
-                  >
-                    <option value="">Select a status</option>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
+                  <Label htmlFor="status" className="text-sm font-medium">New Status</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    <Button 
+                      type="button" 
+                      variant={updateStatus === 'pending' ? 'default' : 'outline'}
+                      className={updateStatus === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                      onClick={() => setUpdateStatus('pending')}
+                    >
+                      Pending
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant={updateStatus === 'in_progress' ? 'default' : 'outline'}
+                      className={updateStatus === 'in_progress' ? 'bg-blue-500 hover:bg-blue-600' : ''}
+                      onClick={() => setUpdateStatus('in_progress')}
+                    >
+                      In Progress
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant={updateStatus === 'completed' ? 'default' : 'outline'}
+                      className={updateStatus === 'completed' ? 'bg-green-500 hover:bg-green-600' : ''}
+                      onClick={() => setUpdateStatus('completed')}
+                    >
+                      Completed
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant={updateStatus === 'cancelled' ? 'default' : 'outline'}
+                      className={updateStatus === 'cancelled' ? 'bg-red-500 hover:bg-red-600' : ''}
+                      onClick={() => setUpdateStatus('cancelled')}
+                    >
+                      Cancelled
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes (Optional)</Label>
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="notes" className="text-sm font-medium">Maintenance Notes</Label>
+                    <span className="text-xs text-gray-500">{updateNotes.length}/500</span>
+                  </div>
                   <Textarea
                     id="notes"
-                    placeholder="Add any notes about this status update..."
+                    placeholder="Add details about the maintenance work performed or reasons for status change..."
                     value={updateNotes}
                     onChange={(e) => setUpdateNotes(e.target.value)}
-                    rows={3}
+                    rows={4}
+                    maxLength={500}
+                    className="resize-none"
                   />
                 </div>
               </div>
             )}
             
-            <DialogFooter>
+            <DialogFooter className="gap-2 mt-4">
               <Button variant="outline" onClick={() => setIsUpdateDialogOpen(false)}>
                 Cancel
               </Button>
               <Button 
                 onClick={handleUpdateStatus} 
                 disabled={processingAction || !updateStatus}
-                className="bg-blue-600 hover:bg-blue-700"
+                className={`
+                  ${updateStatus === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                  ${updateStatus === 'in_progress' ? 'bg-blue-500 hover:bg-blue-600' : ''}
+                  ${updateStatus === 'completed' ? 'bg-green-500 hover:bg-green-600' : ''}
+                  ${updateStatus === 'cancelled' ? 'bg-red-500 hover:bg-red-600' : ''}
+                  ${!updateStatus ? 'bg-gray-500' : ''}
+                `}
               >
                 {processingAction ? (
                   <>
@@ -427,7 +629,11 @@ export default function MaintenancePage() {
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
+                    {updateStatus === 'completed' && <CheckCircle className="mr-2 h-4 w-4" />}
+                    {updateStatus === 'in_progress' && <PenToolIcon className="mr-2 h-4 w-4" />}
+                    {updateStatus === 'pending' && <AlertCircle className="mr-2 h-4 w-4" />}
+                    {updateStatus === 'cancelled' && <XCircle className="mr-2 h-4 w-4" />}
+                    {!updateStatus && <PenToolIcon className="mr-2 h-4 w-4" />}
                     Update Status
                   </>
                 )}
