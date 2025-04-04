@@ -141,6 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sync user on initial load and when Clerk user changes
   useEffect(() => {
+    // Only run on the client side
+    if (typeof window === 'undefined') return;
+    
     if (isLoaded) {
       syncUser();
     }
@@ -152,9 +155,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const storedRole = localStorage.getItem("userRole");
       if (storedRole && !userRole) {
         setUserRole(storedRole);
+        setIsLoading(false);
       }
     }
-  }, []);
+  }, [userRole]);
 
   return (
     <AuthContext.Provider value={{ isLoading, userRole, syncUser, updateRole }}>
