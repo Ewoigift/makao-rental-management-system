@@ -50,19 +50,19 @@ export default function AdminDashboardPage() {
   const [loadingMaintenance, setLoadingMaintenance] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(true);
 
-  // Fetch maintenance requests
+  // Fetch maintenance requests using API endpoint
   useEffect(() => {
     async function fetchMaintenanceRequests() {
       try {
         setLoadingMaintenance(true);
-        const supabase = createSupabaseClient();
-        const { data, error } = await supabase
-          .from('maintenance_requests')
-          .select('id, unit_id, issue, status, created_at, units(unit_number)')
-          .order('created_at', { ascending: false })
-          .limit(3);
+        const response = await fetch('/api/admin/dashboard/maintenance-simple');
         
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch maintenance requests');
+        }
+        
+        const data = await response.json();
         setMaintenanceRequests(data || []);
       } catch (error) {
         console.error('Error fetching maintenance requests:', error);
@@ -75,19 +75,19 @@ export default function AdminDashboardPage() {
     fetchMaintenanceRequests();
   }, []);
 
-  // Fetch recent payments
+  // Fetch recent payments using API endpoint
   useEffect(() => {
     async function fetchRecentPayments() {
       try {
         setLoadingPayments(true);
-        const supabase = createSupabaseClient();
-        const { data, error } = await supabase
-          .from('payments')
-          .select('id, amount, payment_date, status, tenants(full_name), units(unit_number)')
-          .order('payment_date', { ascending: false })
-          .limit(3);
+        const response = await fetch('/api/admin/dashboard/payments-simple');
         
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch recent payments');
+        }
+        
+        const data = await response.json();
         setRecentPayments(data || []);
       } catch (error) {
         console.error('Error fetching recent payments:', error);
@@ -233,15 +233,15 @@ export default function AdminDashboardPage() {
                           <CheckCircle className="h-5 w-5 text-green-500" />
                         )}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <h4 className="font-medium">{request.issue}</h4>
-                          <span className="text-sm text-gray-500">Unit {request.units?.unit_number}</span>
+                      <div className="flex items-center">                    
+                        <div className="ml-4 space-y-1">
+                          <p className="text-sm font-medium">{request.title || 'Maintenance Issue'}</p>
+                          <p className="text-xs text-gray-500">Unit {request.unit?.unit_number || 'Unknown'}</p>
                         </div>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-sm text-gray-500">#{request.id.slice(0, 8)}</span>
-                          <span className="text-sm text-gray-500">{new Date(request.created_at).toLocaleDateString()}</span>
-                        </div>
+                      </div>                    
+                      <div className="flex justify-between mt-1">
+                        <span className="text-sm text-gray-500">#{request.id.slice(0, 8)}</span>
+                        <span className="text-sm text-gray-500">{new Date(request.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
                   ))
@@ -286,13 +286,13 @@ export default function AdminDashboardPage() {
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between">
-                          <h4 className="font-medium">{payment.tenants?.full_name || 'Tenant'}</h4>
+                          <h4 className="font-medium">{payment.tenant_name || 'Tenant'}</h4>
                           <span className="font-medium text-green-600">
-                            KES {payment.amount?.toLocaleString() || '0'}
+                            KSh {payment.amount?.toLocaleString() || '0'}
                           </span>
                         </div>
                         <div className="flex justify-between mt-1">
-                          <span className="text-sm text-gray-500">Unit {payment.units?.unit_number}</span>
+                          <span className="text-sm text-gray-500">Unit {payment.unit_number}</span>
                           <span className="text-sm text-gray-500">{new Date(payment.payment_date).toLocaleDateString()}</span>
                         </div>
                       </div>

@@ -3,6 +3,15 @@
  */
 
 /**
+ * Format a number as currency (alias for formatKSh)
+ * @param amount - The amount to format
+ * @returns Formatted currency string
+ */
+export function formatCurrency(amount: number | string): string {
+  return formatKSh(amount);
+}
+
+/**
  * Format a number as Kenyan Shilling (KSh)
  * @param amount - The amount to format
  * @param options - Formatting options

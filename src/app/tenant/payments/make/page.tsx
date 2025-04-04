@@ -156,7 +156,7 @@ export default function MakePaymentPage() {
         amount: paymentAmount,
         payment_method: paymentMethod,
         reference_number: paymentDetails.reference,
-        status: 'verified' // Set to verified for demo purposes
+        status: 'pending' // Set to pending as payments need admin verification
       });
       
       console.log('Payment created successfully:', result);
@@ -169,14 +169,14 @@ export default function MakePaymentPage() {
         method: paymentMethod,
         reference: result?.transaction_id || paymentDetails.reference,
         receipt: result?.receipt_number || `RCP-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-        status: 'Verified'
+        status: 'Pending'
       });
       
       // Show success step
       setStep(STEPS.COMPLETE);
       
       // Show success toast
-      toast.success(`Your payment of KSh ${paymentAmount.toLocaleString()} has been processed successfully.`);
+      toast.success(`Your payment of KSh ${paymentAmount.toLocaleString()} has been submitted and is pending verification.`);
     } catch (err) {
       console.error('Error processing payment:', err);
       toast.error("There was an error processing your payment. Please try again.");

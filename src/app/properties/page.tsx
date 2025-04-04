@@ -21,7 +21,7 @@ import PropertyModal from "@/components/properties/property-modal";
 import { propertiesService } from "@/services/properties";
 import { supabase } from "@/lib/supabase/client";
 import type { Property, Unit } from "@/types/supabase";
-import { formatKSh } from "@/lib/utils/currency";
+import { formatCurrency, formatKSh } from "@/lib/utils/currency";
 import ProtectedLayout from "@/components/layout/protected-layout";
 import { Input } from "@/components/ui/input";
 import {

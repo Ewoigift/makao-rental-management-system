@@ -114,7 +114,7 @@ export async function createPayment(
         payment_method: paymentData.payment_method,
         transaction_id: paymentData.reference_number,
         payment_category: 'rent',
-        status: paymentData.status || 'verified',
+        status: paymentData.status || 'pending',
         receipt_number: receiptNumber,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
