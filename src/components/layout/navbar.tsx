@@ -3,20 +3,42 @@
 import { Button } from "@/components/ui/button";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { User } from "lucide-react";
+import { User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserButton, SignInButton, useUser } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth/auth-provider";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Navbar() {
   const pathname = usePathname();
+  const { isSignedIn, user } = useUser();
+  const { userRole, setUserRole, signOut } = useAuth();
 
-  const navItems = [
-    { href: "/properties", label: "Properties", icon: "🏠" },
-    { href: "/units", label: "Units", icon: "🚪" },
-    { href: "/tenants", label: "Tenants", icon: "👤" },
-    { href: "/leases", label: "Leases", icon: "📄" },
+  // Determine navigation items based on user role
+  const landlordNavItems = [
+    { href: "/dashboard", label: "Dashboard", icon: "📊" },
+    { href: "/properties", label: "Properties", icon: "🏢" },
+    { href: "/units", label: "Units", icon: "🏠" },
+    { href: "/tenants", label: "Tenants", icon: "👥" },
+    { href: "/leases", label: "Leases", icon: "📝" },
     { href: "/payments", label: "Payments", icon: "💰" },
-    { href: "/supabase-test", label: "Test Connection", icon: "🔧" },
   ];
+
+  const tenantNavItems = [
+    { href: "/tenant/dashboard", label: "Dashboard", icon: "📊" },
+    { href: "/tenant/lease", label: "My Lease", icon: "📝" },
+    { href: "/tenant/payments", label: "Payments", icon: "💰" },
+    { href: "/tenant/maintenance", label: "Maintenance", icon: "🔧" },
+    { href: "/tenant/notifications", label: "Notifications", icon: "🔔" },
+  ];
+
+  // Use appropriate nav items based on user role
+  const navItems = userRole === "tenant" ? tenantNavItems : landlordNavItems;
 
   return (
     <nav className="flex items-center justify-between flex-wrap bg-gray-800 p-6">
@@ -40,11 +62,39 @@ export function Navbar() {
             </Link>
           ))}
         </div>
-        <div>
-          <Button variant="outline" size="sm">
-            <User className="mr-2 h-4 w-4" />
-            Profile
-          </Button>
+        <div className="flex items-center space-x-4">
+          {isSignedIn ? (
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-200">
+                <span>{user?.fullName || user?.emailAddresses[0]?.emailAddress}</span>
+                {userRole && (
+                  <span className="ml-2 px-2 py-1 bg-gray-700 rounded-full text-xs">
+                    {userRole === "tenant" ? "Tenant" : "Landlord"}
+                  </span>
+                )}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <div className="cursor-pointer">
+                    <UserButton afterSignOutUrl="/" />
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => signOut()} className="cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <SignInButton mode="modal">
+              <Button variant="default" size="sm">
+                <User className="mr-2 h-4 w-4" />
+                Sign In
+              </Button>
+            </SignInButton>
+          )}
         </div>
       </div>
     </nav>
