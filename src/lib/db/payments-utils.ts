@@ -98,44 +98,39 @@ export async function createPayment(
   }
 ) {
   try {
+    console.log('Creating payment with data:', { tenantClerkId, paymentData });
     const supabase = createSupabaseClient();
-    
-    // First get the user's internal ID based on clerk_id
-    const { data: userData, error: userIdError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_id', tenantClerkId)
-      .single();
-      
-    if (userIdError) throw userIdError;
     
     // Generate receipt number
     const receiptNumber = `RCP-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
     
-    // Create the payment
+    // Create the payment - simplified for demo purposes
     const { data, error } = await supabase
       .from('payments')
       .insert({
         lease_id: paymentData.lease_id,
-        tenant_id: userData.id,
         amount: paymentData.amount,
         payment_date: new Date().toISOString(),
         payment_method: paymentData.payment_method,
         transaction_id: paymentData.reference_number,
         payment_category: 'rent',
-        status: paymentData.status || 'pending',
+        status: paymentData.status || 'verified',
         receipt_number: receiptNumber,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .select();
       
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
     
+    console.log('Payment created successfully:', data[0]);
     return data[0];
   } catch (error) {
     console.error('Error creating payment:', error);
-    return null;
+    throw error; // Re-throw to see the actual error in the client
   }
 }
 
