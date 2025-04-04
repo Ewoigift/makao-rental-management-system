@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoaded, isSignedIn } = useUser();
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   // Sync user data with Supabase when Clerk user changes
@@ -32,27 +33,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSignedIn || !user) {
       setIsLoading(false);
       setUserRole(null);
+      localStorage.removeItem("userRole");
       return;
     }
 
     try {
       setIsLoading(true);
+      setError(null);
+      
+      // Check for existing role in localStorage first
+      const storedRole = localStorage.getItem("userRole");
+      
+      if (storedRole) {
+        setUserRole(storedRole);
+        setIsLoading(false);
+        handleRoleBasedRedirect(storedRole);
+        return;
+      }
       
       // Sync user data with Supabase
       await syncUserWithSupabase(user);
       
       // Get user role from Supabase
       const role = await getUserRole(user.id);
-      setUserRole(role);
       
-      // Store role in localStorage for client-side access
       if (role) {
+        setUserRole(role);
         localStorage.setItem("userRole", role);
+        handleRoleBasedRedirect(role);
       }
     } catch (error) {
       console.error("Error syncing user with Supabase:", error);
+      setError("Failed to sync user data. Please try again.");
+      router.push("/error");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Helper function for role-based redirects
+  const handleRoleBasedRedirect = (role: string) => {
+    if (role === "tenant") {
+      router.push("/tenant/dashboard");
+    } else if (role === "landlord") {
+      router.push("/dashboard");
     }
   };
 
@@ -62,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
+      setError(null);
       
       // Make API call to update role
       const response = await fetch("/api/auth/update-role", {
@@ -78,15 +103,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUserRole(role);
       localStorage.setItem("userRole", role);
-      
-      // Redirect based on role
-      if (role === "tenant") {
-        router.push("/tenant/dashboard");
-      } else if (role === "landlord") {
-        router.push("/dashboard");
-      }
+      handleRoleBasedRedirect(role);
     } catch (error) {
       console.error("Error updating role:", error);
+      setError("Failed to update role. Please try again.");
+      router.push("/error");
     } finally {
       setIsLoading(false);
     }
