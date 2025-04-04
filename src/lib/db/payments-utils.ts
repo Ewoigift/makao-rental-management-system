@@ -94,6 +94,7 @@ export async function createPayment(
     amount: number;
     payment_method: string;
     reference_number: string;
+    status?: string;
   }
 ) {
   try {
@@ -108,7 +109,7 @@ export async function createPayment(
         payment_date: new Date().toISOString(),
         payment_method: paymentData.payment_method,
         reference_number: paymentData.reference_number,
-        status: 'pending',
+        status: paymentData.status || 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })

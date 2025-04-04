@@ -49,7 +49,7 @@ export default function MakePaymentPage() {
     amount: '',
     paymentType: 'rent',
     month: '',
-    reference: `MPESA-${Math.floor(Math.random() * 10000)}`
+    reference: `MPESA-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`
   });
   
   const [paymentMethod, setPaymentMethod] = useState('mpesa');
@@ -75,22 +75,24 @@ export default function MakePaymentPage() {
         // Get payment summary
         const paymentSummary = await getTenantPaymentSummary(user.id);
         
-        // Set tenant info
+        // Set tenant info with detailed unit information
         setTenantInfo({
           name: user.fullName || user.firstName + ' ' + (user.lastName || ''),
           unit: lease.unit?.unit_number || '',
           property: lease.unit?.property?.name || '',
-          rentAmount: paymentSummary.rentAmount,
+          rentAmount: lease.rent_amount ? `KSh ${parseFloat(lease.rent_amount).toLocaleString()}` : paymentSummary.rentAmount,
           nextPaymentDue: paymentSummary.nextPaymentDue ? formatDate(paymentSummary.nextPaymentDue) : 'N/A',
           balance: paymentSummary.currentBalance,
           leaseId: lease.id,
           hasLease: true
         });
         
-        // Set default payment amount
+        // Set default payment amount - remove currency symbol and commas for calculation
+        const cleanAmount = lease.rent_amount || paymentSummary.currentBalance.replace('KSh ', '').replace(/,/g, '');
+        
         setPaymentDetails(prev => ({
           ...prev,
-          amount: paymentSummary.currentBalance.replace('KSh ', '').replace(',', ''),
+          amount: typeof cleanAmount === 'string' ? cleanAmount.replace('KSh ', '').replace(/,/g, '') : cleanAmount,
           month: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
         }));
       } catch (err) {
@@ -130,18 +132,20 @@ export default function MakePaymentPage() {
         throw new Error('Missing required information');
       }
       
-      // Create payment in database
+      // Create payment in database with successful status for demo
       const result = await createPayment(user.id, {
         lease_id: tenantInfo.leaseId,
         amount: parseFloat(paymentDetails.amount),
         payment_method: paymentMethod,
-        reference_number: paymentDetails.reference
+        reference_number: paymentDetails.reference,
+        status: 'completed' // Set status to completed for demo purposes
       });
       
       if (!result) {
         throw new Error('Failed to create payment');
       }
       
+      // Show success step
       setStep(STEPS.COMPLETE);
     } catch (err) {
       console.error('Error creating payment:', err);
@@ -193,8 +197,9 @@ export default function MakePaymentPage() {
               type="text" 
               value={paymentDetails.amount} 
               onChange={(e) => setPaymentDetails({...paymentDetails, amount: e.target.value})}
+              disabled
             />
-            <p className="text-xs text-gray-500 mt-1">Suggested amount based on your current balance</p>
+            <p className="text-xs text-gray-500 mt-1">Amount based on your current balance</p>
           </div>
           
           <div>
@@ -374,9 +379,9 @@ export default function MakePaymentPage() {
       </div>
       
       <div>
-        <h2 className="text-2xl font-bold">Payment Submitted</h2>
+        <h2 className="text-2xl font-bold">Payment Successful!</h2>
         <p className="text-gray-500 mt-2">
-          Your payment of <span className="font-medium">KES {paymentDetails.amount}</span> has been submitted successfully.
+          Your payment of <span className="font-medium">KSh {parseFloat(paymentDetails.amount).toLocaleString()}</span> has been processed successfully.
         </p>
       </div>
       
@@ -397,9 +402,13 @@ export default function MakePaymentPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Status:</span>
-            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-              Pending Verification
+            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+              Completed
             </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Receipt Number:</span>
+            <span className="font-medium">RCP-{Math.floor(Math.random() * 10000).toString().padStart(4, '0')}</span>
           </div>
         </div>
       </div>
@@ -473,23 +482,32 @@ export default function MakePaymentPage() {
                 <dl className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <dt className="font-medium text-gray-500">Tenant</dt>
-                    <dd>{tenantInfo.name}</dd>
+                    <dd className="font-semibold mt-1">{tenantInfo.name || 'N/A'}</dd>
                   </div>
                   <div>
                     <dt className="font-medium text-gray-500">Unit</dt>
-                    <dd>{tenantInfo.unit}, {tenantInfo.property}</dd>
+                    <dd className="font-semibold mt-1">
+                      {tenantInfo.unit ? (
+                        <span className="inline-flex items-center">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs mr-2">
+                            Unit {tenantInfo.unit}
+                          </span>
+                          {tenantInfo.property}
+                        </span>
+                      ) : 'N/A'}
+                    </dd>
                   </div>
                   <div>
                     <dt className="font-medium text-gray-500">Monthly Rent</dt>
-                    <dd>{tenantInfo.rentAmount}</dd>
+                    <dd className="font-semibold mt-1">{tenantInfo.rentAmount || 'KSh 0.00'}</dd>
                   </div>
                   <div>
                     <dt className="font-medium text-gray-500">Next Payment Due</dt>
-                    <dd>{tenantInfo.nextPaymentDue}</dd>
+                    <dd className="font-semibold mt-1">{tenantInfo.nextPaymentDue || 'N/A'}</dd>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <dt className="font-medium text-gray-500">Current Balance</dt>
-                    <dd className="font-semibold">{tenantInfo.balance}</dd>
+                    <dd className="font-semibold text-lg text-primary mt-1">{tenantInfo.balance || 'KSh 0.00'}</dd>
                   </div>
                 </dl>
               </CardContent>
