@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clerkClient } from '@clerk/nextjs';
+import { getAuth } from '@clerk/nextjs/server';
 import { sendNotification, NotificationType } from '@/lib/notifications/notification-service';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client with service role key for admin access
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -11,78 +10,75 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = getAuth(request);
+    
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { type, recipientId, variables, saveToDatabase = true } = body;
 
     if (!type || !recipientId) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Validate notification type
-    const validTypes: NotificationType[] = [
-      'PAYMENT_REMINDER',
-      'PAYMENT_CONFIRMATION',
-      'MAINTENANCE_UPDATE',
-      'LEASE_EXPIRY',
-      'WELCOME',
-      'GENERAL_ANNOUNCEMENT'
-    ];
+    // If saveToDatabase is true, save notification to database
+    if (saveToDatabase) {
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: recipientId,
+          type,
+          title: variables?.title || type,
+          message: variables?.message || '',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
 
-    if (!validTypes.includes(type as NotificationType)) {
-      return NextResponse.json(
-        { error: 'Invalid notification type' },
-        { status: 400 }
-      );
+      if (error) {
+        console.error('Error saving notification to database:', error);
+      }
     }
 
-    // Get user details from Clerk
-    const user = await clerkClient.users.getUser(recipientId);
+    // Get user details from Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('clerk_id', recipientId)
+      .single();
     
-    if (!user) {
+    if (userError || !userData) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
       );
     }
 
-    // Get primary email and phone
-    const email = user.emailAddresses.find(
-      email => email.id === user.primaryEmailAddressId
-    )?.emailAddress;
-    
-    const phone = user.phoneNumbers.find(
-      phone => phone.id === user.primaryPhoneNumberId
-    )?.phoneNumber;
+    // Get email and phone from user data
+    const email: string | null = userData.email;
+    const phone: string | null = userData.phone;
 
     // Send notification
-    const result = await sendNotification({
+    await sendNotification({
       type: type as NotificationType,
       recipient: {
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-        email,
-        phone
+        name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+        email: email,
+        phone: phone
       },
       variables
     });
 
-    // Save notification to database if requested
-    if (saveToDatabase) {
-      await supabase.from('notifications').insert({
-        user_id: recipientId,
-        type,
-        content: JSON.stringify(variables),
-        sms_sent: result.sms.success,
-        email_sent: result.email.success,
-        created_at: new Date().toISOString()
-      });
-    }
-
     return NextResponse.json({
       success: true,
-      result
+      message: 'Notification sent successfully'
     });
   } catch (error: any) {
     console.error('Error sending notification:', error);
@@ -97,45 +93,65 @@ export async function POST(request: NextRequest) {
 // Get notifications for a user
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const userId = searchParams.get('userId');
-    const limit = parseInt(searchParams.get('limit') || '10');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const { userId } = getAuth(request);
     
     if (!userId) {
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
-    // Get notifications from database
-    const { data, error } = await supabase
-      .from('notifications')
+    const searchParams = request.nextUrl.searchParams;
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const offset = parseInt(searchParams.get('offset') || '0');
+    
+    // Get user data from Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
       .select('*')
-      .eq('user_id', userId)
+      .eq('clerk_id', userId)
+      .single();
+
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get notifications for the user
+    const { data: notifications, error: notificationsError, count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userData.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      throw error;
+    if (notificationsError) {
+      return NextResponse.json(
+        { error: 'Failed to fetch notifications' },
+        { status: 500 }
+      );
     }
 
-    // Get total count
-    const { count, error: countError } = await supabase
+    // Get unread count
+    const { count: unreadCount, error: unreadError } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+      .eq('user_id', userData.id)
+      .eq('is_read', false);
 
-    if (countError) {
-      throw countError;
+    if (unreadError) {
+      console.error('Error fetching unread count:', unreadError);
     }
 
     return NextResponse.json({
       success: true,
-      data,
-      pagination: {
-        total: count,
+      data: notifications,
+      meta: {
+        total: count || 0,
+        unread: unreadCount || 0,
         limit,
         offset
       }
@@ -153,30 +169,72 @@ export async function GET(request: NextRequest) {
 // Mark notification as read
 export async function PATCH(request: NextRequest) {
   try {
+    const { userId } = getAuth(request);
+    
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { notificationId, read = true } = body;
 
     if (!notificationId) {
       return NextResponse.json(
-        { error: 'Missing notificationId parameter' },
+        { error: 'Notification ID is required' },
         { status: 400 }
       );
     }
 
-    // Update notification in database
-    const { data, error } = await supabase
-      .from('notifications')
-      .update({ read })
-      .eq('id', notificationId)
-      .select();
+    // Get user data from Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('clerk_id', userId)
+      .single();
 
-    if (error) {
-      throw error;
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify the notification belongs to the user
+    const { data: notificationData, error: notificationError } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('id', notificationId)
+      .eq('user_id', userData.id)
+      .single();
+
+    if (notificationError || !notificationData) {
+      return NextResponse.json(
+        { error: 'Notification not found or does not belong to user' },
+        { status: 404 }
+      );
+    }
+
+    // Mark notification as read/unread
+    const { data: updatedNotification, error: updateError } = await supabase
+      .from('notifications')
+      .update({ is_read: read })
+      .eq('id', notificationId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: 'Failed to update notification' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      data
+      data: updatedNotification
     });
   } catch (error: any) {
     console.error('Error updating notification:', error);

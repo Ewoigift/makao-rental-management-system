@@ -1,37 +1,41 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { authMiddleware } from '@clerk/nextjs';
+import { NextResponse } from 'next/server';
 
-// Define public routes
-const isPublicRoute = createRouteMatcher([
-  '/', 
-  '/sign-in(.*)', 
-  '/sign-up(.*)', 
+// Define public routes that don't require authentication
+const publicRoutes = [
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
   '/api/webhook/clerk',
-  '/properties(.*)', // Public property listings
-  '/rooms(.*)', // Public room listings
-]);
+  '/properties(.*)',
+  '/rooms(.*)',
+];
 
 // Define routes that need to be ignored completely
-const isIgnoredRoute = createRouteMatcher([
+const ignoredRoutes = [
   '/api/webhook/clerk',
-]);
+  '/_next(.*)',
+  '/favicon.ico',
+  '/static(.*)',
+];
 
-export default clerkMiddleware(async (auth, req) => {
-  // Skip processing for ignored routes
-  if (isIgnoredRoute(req)) {
-    return;
-  }
-  
-  // Protect all routes except public ones
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
+export default authMiddleware({
+  publicRoutes,
+  ignoredRoutes,
+  afterAuth(auth, req) {
+    // If the user is signed in and trying to access auth pages, redirect them
+    if (auth.userId && (req.nextUrl.pathname.startsWith('/sign-in') || req.nextUrl.pathname.startsWith('/sign-up'))) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
+    // For everything else, just continue
+    return NextResponse.next();
+  },
 });
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
     '/(api|trpc)(.*)',
   ],
 };
