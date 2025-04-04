@@ -253,7 +253,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="mt-4 text-center">
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/admin/maintenance">View All Maintenance Requests</Link>
+                  <Link href="/maintenance">View All Maintenance Requests</Link>
                 </Button>
               </div>
             </CardContent>
@@ -306,7 +306,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="mt-4 text-center">
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/admin/payments">View All Payments</Link>
+                  <Link href="/payments">View All Payments</Link>
                 </Button>
               </div>
             </CardContent>
