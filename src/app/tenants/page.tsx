@@ -17,18 +17,39 @@ import {
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 
-// Types
+// Types based on Supabase schema
 interface Tenant {
   id: string;
-  name: string;
+  full_name: string;
   email: string;
-  phone: string;
-  unitNumber: string;
-  propertyName: string;
-  leaseStart: string;
-  leaseEnd: string;
-  status: 'active' | 'inactive' | 'pending';
-  rentAmount: string;
+  phone_number: string;
+  user_type: string;
+  profile_picture_url?: string;
+  id_number?: string;
+  created_at: string;
+  updated_at: string;
+  leases?: Lease[];
+}
+
+interface Lease {
+  id: string;
+  unit_id: string;
+  tenant_id: string;
+  start_date: string;
+  end_date: string;
+  rent_amount: number;
+  deposit_amount: number;
+  status: 'active' | 'expired' | 'terminated' | 'pending';
+  unit?: {
+    id: string;
+    unit_number: string;
+    property_id: string;
+    property?: {
+      id: string;
+      name: string;
+      address: string;
+    };
+  };
 }
 
 export default function TenantsPage() {
@@ -38,10 +59,40 @@ export default function TenantsPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // In a real app, fetch tenants from Supabase
+  // Fetch tenants from Supabase
   useEffect(() => {
-    // Sample data - would come from Supabase in production
-    const demoTenants: Tenant[] = [
+    const fetchTenants = async () => {
+      try {
+        setLoading(true);
+        const { supabase } = await import('@/lib/supabase/client');
+        
+        const { data, error } = await supabase
+          .from('users')
+          .select(`
+            *,
+            leases(*, unit:units(*, property:properties(id, name, address)))
+          `)
+          .eq('user_type', 'tenant');
+        
+        if (error) throw error;
+        
+        if (data) {
+          setTenants(data);
+          setFilteredTenants(data);
+        }
+      } catch (error) {
+        console.error('Error fetching tenants:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchTenants();
+  }, []);
+  
+  // Sample data - uncomment if needed during development
+  /*
+  const demoTenants: Tenant[] = [
       {
         id: "t1",
         name: "John Doe",
@@ -103,13 +154,7 @@ export default function TenantsPage() {
         rentAmount: "KES 45,000",
       },
     ];
-
-    // Simulate API loading delay
-    setTimeout(() => {
-      setTenants(demoTenants);
-      setFilteredTenants(demoTenants);
-      setLoading(false);
-    }, 800);
+  */
 
     // In production:
     // async function fetchTenants() {
@@ -149,7 +194,7 @@ export default function TenantsPage() {
     // }
     //
     // fetchTenants();
-  }, []);
+  // }, []);
 
   // Filter tenants based on search and status
   useEffect(() => {
@@ -158,15 +203,21 @@ export default function TenantsPage() {
     if (searchQuery) {
       const lowercaseQuery = searchQuery.toLowerCase();
       results = results.filter(tenant => 
-        tenant.name.toLowerCase().includes(lowercaseQuery) ||
-        tenant.email.toLowerCase().includes(lowercaseQuery) ||
-        tenant.unitNumber.toLowerCase().includes(lowercaseQuery) ||
-        tenant.propertyName.toLowerCase().includes(lowercaseQuery)
+        (tenant.full_name?.toLowerCase() || '').includes(lowercaseQuery) ||
+        (tenant.email?.toLowerCase() || '').includes(lowercaseQuery) ||
+        (tenant.phone_number?.toLowerCase() || '').includes(lowercaseQuery) ||
+        tenant.leases?.some(lease => 
+          (lease.unit?.unit_number?.toLowerCase() || '').includes(lowercaseQuery) ||
+          (lease.unit?.property?.name?.toLowerCase() || '').includes(lowercaseQuery)
+        )
       );
     }
     
     if (statusFilter) {
-      results = results.filter(tenant => tenant.status === statusFilter);
+      // Filter by lease status
+      results = results.filter(tenant => 
+        tenant.leases?.some(lease => lease.status === statusFilter)
+      );
     }
     
     setFilteredTenants(results);
@@ -176,8 +227,10 @@ export default function TenantsPage() {
     switch (status) {
       case 'active':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Active</Badge>;
-      case 'inactive':
-        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Inactive</Badge>;
+      case 'expired':
+        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Expired</Badge>;
+      case 'terminated':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Terminated</Badge>;
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       default:
@@ -293,30 +346,44 @@ export default function TenantsPage() {
                 <tbody>
                   {filteredTenants.map((tenant) => (
                     <tr key={tenant.id} className="border-b hover:bg-muted/50">
-                      <td className="p-4 font-medium">{tenant.name}</td>
+                       <td className="p-4 font-medium">{tenant.full_name || 'N/A'}</td>
                       <td className="p-4">
                         <div className="flex flex-col space-y-1">
                           <div className="flex items-center gap-1">
                             <Mail className="h-3 w-3 text-gray-500" />
                             <a href={`mailto:${tenant.email}`} className="text-sm text-blue-600 hover:underline">
-                              {tenant.email}
+                              {tenant.email || 'N/A'}
                             </a>
                           </div>
                           <div className="flex items-center gap-1">
                             <Phone className="h-3 w-3 text-gray-500" />
-                            <span className="text-sm text-gray-600">{tenant.phone}</span>
+                            <span className="text-sm text-gray-600">{tenant.phone_number || 'N/A'}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">{tenant.unitNumber}</td>
-                      <td className="p-4">{tenant.propertyName}</td>
+                      <td className="p-4">
+                        {tenant.leases && tenant.leases.length > 0 ? 
+                          tenant.leases[0].unit?.unit_number || 'N/A' : 'No unit'}
+                      </td>
+                      <td className="p-4">
+                        {tenant.leases && tenant.leases.length > 0 ? 
+                          tenant.leases[0].unit?.property?.name || 'N/A' : 'No property'}
+                      </td>
                       <td className="p-4">
                         <div className="text-sm">
-                          {formatDate(tenant.leaseStart)} — {formatDate(tenant.leaseEnd)}
+                          {tenant.leases && tenant.leases.length > 0 ? 
+                            `${formatDate(tenant.leases[0].start_date)} — ${formatDate(tenant.leases[0].end_date)}` : 'No lease'}
                         </div>
                       </td>
-                      <td className="p-4">{tenant.rentAmount}</td>
-                      <td className="p-4">{getStatusBadge(tenant.status)}</td>
+                      <td className="p-4">
+                        {tenant.leases && tenant.leases.length > 0 ? 
+                          `$${tenant.leases[0].rent_amount.toFixed(2)}` : 'N/A'}
+                      </td>
+                      <td className="p-4">
+                        {tenant.leases && tenant.leases.length > 0 ? 
+                          getStatusBadge(tenant.leases[0].status) : 
+                          <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">No lease</Badge>}
+                      </td>
                       <td className="p-4">
                         <Button variant="ghost" size="sm">View</Button>
                       </td>

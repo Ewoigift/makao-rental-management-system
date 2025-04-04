@@ -17,18 +17,26 @@ import {
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 
-// Types
+// Types based on Supabase schema
 interface Unit {
   id: string;
-  number: string;
-  propertyName: string;
-  type: string;
-  bedrooms: number;
-  bathrooms: number;
-  size: string;
-  rent: string;
-  status: 'vacant' | 'occupied' | 'maintenance';
-  tenantName?: string;
+  unit_number: string;
+  property_id: string;
+  property?: {
+    id: string;
+    name: string;
+    address: string;
+    property_type: string;
+  };
+  floor_number?: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  square_feet?: number;
+  rent_amount: number;
+  deposit_amount: number;
+  status: 'vacant' | 'occupied' | 'maintenance' | 'renovation';
+  features?: any;
+  images?: string[];
 }
 
 export default function UnitsPage() {
@@ -38,130 +46,92 @@ export default function UnitsPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // In a real app, fetch units from Supabase
+  // Fetch units from Supabase
   useEffect(() => {
-    // Sample data - would come from Supabase in production
-    const demoUnits: Unit[] = [
-      {
-        id: "u1",
-        number: "A101",
-        propertyName: "Sunset Apartments",
-        type: "Apartment",
-        bedrooms: 2,
-        bathrooms: 1,
-        size: "80 sqm",
-        rent: "KES 25,000",
-        status: "occupied",
-        tenantName: "John Doe"
-      },
-      {
-        id: "u2",
-        number: "A102",
-        propertyName: "Sunset Apartments",
-        type: "Apartment",
-        bedrooms: 2,
-        bathrooms: 1,
-        size: "80 sqm",
-        rent: "KES 25,000",
-        status: "vacant"
-      },
-      {
-        id: "u3",
-        number: "B201",
-        propertyName: "Sunset Apartments",
-        type: "Apartment",
-        bedrooms: 3,
-        bathrooms: 2,
-        size: "110 sqm",
-        rent: "KES 35,000",
-        status: "occupied",
-        tenantName: "Jane Smith"
-      },
-      {
-        id: "u4",
-        number: "B202",
-        propertyName: "Sunset Apartments",
-        type: "Apartment",
-        bedrooms: 3,
-        bathrooms: 2,
-        size: "110 sqm",
-        rent: "KES 35,000",
-        status: "maintenance"
-      },
-      {
-        id: "u5",
-        number: "C101",
-        propertyName: "Riverside Homes",
-        type: "Townhouse",
-        bedrooms: 4,
-        bathrooms: 3,
-        size: "150 sqm",
-        rent: "KES 60,000",
-        status: "occupied",
-        tenantName: "Robert Johnson"
-      },
-      {
-        id: "u6",
-        number: "C102",
-        propertyName: "Riverside Homes",
-        type: "Townhouse",
-        bedrooms: 4,
-        bathrooms: 3,
-        size: "150 sqm",
-        rent: "KES 60,000",
-        status: "vacant"
-      },
-    ];
-
-    // Simulate API loading delay
-    setTimeout(() => {
-      setUnits(demoUnits);
-      setFilteredUnits(demoUnits);
-      setLoading(false);
-    }, 800);
-
-    // In production:
-    // async function fetchUnits() {
-    //   try {
-    //     const supabase = createSupabaseClient();
-    //     const { data, error } = await supabase
-    //       .from('units')
-    //       .select(`
-    //         *,
-    //         properties(name),
-    //         leases(
-    //           tenant_id,
-    //           tenants(full_name)
-    //         )
-    //       `)
-    //       .eq('is_active', true);
-    //
-    //     if (error) throw error;
-    //     
-    //     const formattedUnits = data.map(unit => ({
-    //       id: unit.id,
-    //       number: unit.unit_number,
-    //       propertyName: unit.properties.name,
-    //       type: unit.unit_type,
-    //       bedrooms: unit.bedrooms,
-    //       bathrooms: unit.bathrooms,
-    //       size: `${unit.size_sqm} sqm`,
-    //       rent: `KES ${unit.rent_amount.toLocaleString()}`,
-    //       status: unit.status,
-    //       tenantName: unit.leases?.[0]?.tenants?.full_name
-    //     }));
-    //
-    //     setUnits(formattedUnits);
-    //     setFilteredUnits(formattedUnits);
-    //   } catch (error) {
-    //     console.error('Error fetching units:', error);
-    //   } finally {
-    //     setLoading(false);
-    //   }
-    // }
-    //
-    // fetchUnits();
+    const fetchUnits = async () => {
+      try {
+        setLoading(true);
+        const { supabase } = await import('@/lib/supabase/client');
+        
+        const { data, error } = await supabase
+          .from('units')
+          .select(`
+            *,
+            property:properties(id, name, address, property_type)
+          `);
+          
+        if (error) throw error;
+        
+        if (data) {
+          setUnits(data);
+          setFilteredUnits(data);
+        }
+      } catch (error) {
+        console.error('Error fetching units:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUnits();
   }, []);
+  
+  // Reference for mock data and alternative implementation:
+  /*
+  // Example mock data structure
+  const demoUnits: Unit[] = [
+    {
+      id: "u1",
+      unit_number: "A101",
+      property_id: "p1",
+      property: {
+        id: "p1",
+        name: "Sunset Apartments",
+        address: "123 Main St",
+        property_type: "Apartment"
+      },
+      bedrooms: 2,
+      bathrooms: 1,
+      square_feet: 800,
+      rent_amount: 25000,
+      deposit_amount: 25000,
+      status: "occupied",
+    },
+    // More units...
+  ];
+
+  // Simulate API loading delay example:
+  // setTimeout(() => {
+  //   setUnits(demoUnits);
+  //   setFilteredUnits(demoUnits);
+  //   setLoading(false);
+  // }, 800);
+
+  // Alternative implementation for fetching units:
+  // async function fetchUnits() {
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('units')
+  //       .select(`
+  //         *,
+  //         properties(name),
+  //         leases(
+  //           tenant_id,
+  //           tenant:users(full_name)
+  //         )
+  //       `);
+  //
+  //     if (error) throw error;
+  //     
+  //     setUnits(data);
+  //     setFilteredUnits(data);
+  //   } catch (error) {
+  //     console.error('Error fetching units:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }
+  */
 
   // Filter units based on search and status
   useEffect(() => {
@@ -170,9 +140,8 @@ export default function UnitsPage() {
     if (searchQuery) {
       const lowercaseQuery = searchQuery.toLowerCase();
       results = results.filter(unit => 
-        unit.number.toLowerCase().includes(lowercaseQuery) ||
-        unit.propertyName.toLowerCase().includes(lowercaseQuery) ||
-        unit.tenantName?.toLowerCase().includes(lowercaseQuery)
+        unit.unit_number.toLowerCase().includes(lowercaseQuery) ||
+        unit.property?.name?.toLowerCase().includes(lowercaseQuery)
       );
     }
     
@@ -191,6 +160,8 @@ export default function UnitsPage() {
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Occupied</Badge>;
       case 'maintenance':
         return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Maintenance</Badge>;
+      case 'renovation':
+        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Renovation</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -261,6 +232,13 @@ export default function UnitsPage() {
                       Maintenance
                       {statusFilter === "maintenance" && <Check className="h-4 w-4" />}
                     </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setStatusFilter("renovation")}
+                      className="flex items-center justify-between"
+                    >
+                      Renovation
+                      {statusFilter === "renovation" && <Check className="h-4 w-4" />}
+                    </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -284,11 +262,9 @@ export default function UnitsPage() {
                   <tr className="border-b">
                     <th className="text-left p-4 font-medium">Unit</th>
                     <th className="text-left p-4 font-medium">Property</th>
-                    <th className="text-left p-4 font-medium">Type</th>
-                    <th className="text-left p-4 font-medium">Size</th>
+                    <th className="text-left p-4 font-medium">Details</th>
                     <th className="text-left p-4 font-medium">Rent</th>
                     <th className="text-left p-4 font-medium">Status</th>
-                    <th className="text-left p-4 font-medium">Tenant</th>
                     <th className="text-left p-4 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -296,26 +272,22 @@ export default function UnitsPage() {
                   {filteredUnits.map((unit) => (
                     <tr key={unit.id} className="border-b hover:bg-muted/50">
                       <td className="p-4">
-                        <div className="font-medium">{unit.number}</div>
+                        <div className="font-medium">{unit.unit_number}</div>
                         <div className="text-sm text-gray-500">
-                          {unit.bedrooms} bd, {unit.bathrooms} ba
+                          Floor {unit.floor_number || 'N/A'}
                         </div>
                       </td>
-                      <td className="p-4">{unit.propertyName}</td>
-                      <td className="p-4">{unit.type}</td>
-                      <td className="p-4">{unit.size}</td>
-                      <td className="p-4">{unit.rent}</td>
-                      <td className="p-4">{getStatusBadge(unit.status)}</td>
+                      <td className="p-4">{unit.property?.name || 'N/A'}</td>
                       <td className="p-4">
-                        {unit.tenantName ? (
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-500" />
-                            {unit.tenantName}
+                        <div className="text-sm">
+                          <span className="font-medium">{unit.bedrooms || 0} bd, {unit.bathrooms || 0} ba</span>
+                          <div className="text-gray-500">
+                            {unit.square_feet ? `${unit.square_feet} sq ft` : 'Size N/A'}
                           </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
+                        </div>
                       </td>
+                      <td className="p-4">${unit.rent_amount?.toFixed(2) || '0.00'}</td>
+                      <td className="p-4">{getStatusBadge(unit.status)}</td>
                       <td className="p-4">
                         <Button variant="ghost" size="sm">View</Button>
                       </td>

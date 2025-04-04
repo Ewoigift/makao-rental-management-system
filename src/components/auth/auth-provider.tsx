@@ -1,28 +1,33 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useClerk } from "@clerk/nextjs";
 import { syncUserWithSupabase, getUserRole } from "@/lib/auth/auth-utils";
 import { useRouter } from "next/navigation";
 
 type AuthContextType = {
   isLoading: boolean;
   userRole: string | null;
+  setUserRole: (role: string | null) => void;
   syncUser: () => Promise<void>;
   updateRole: (role: string) => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   userRole: null,
+  setUserRole: () => {},
   syncUser: async () => {},
   updateRole: async () => {},
+  signOut: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +144,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Sign out function - handles both Clerk signout and local cleanup
+  const signOut = async () => {
+    try {
+      // Clear local state
+      localStorage.removeItem("userRole");
+      setUserRole(null);
+      
+      // Sign out from Clerk
+      await clerkSignOut();
+      
+      // Redirect to homepage
+      router.push("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   // Sync user on initial load and when Clerk user changes
   useEffect(() => {
     // Only run on the client side
@@ -161,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userRole]);
 
   return (
-    <AuthContext.Provider value={{ isLoading, userRole, syncUser, updateRole }}>
+    <AuthContext.Provider value={{ isLoading, userRole, setUserRole, syncUser, updateRole, signOut }}>
       {children}
     </AuthContext.Provider>
   );
