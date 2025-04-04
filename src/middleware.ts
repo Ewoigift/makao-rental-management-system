@@ -1,36 +1,38 @@
-import { authMiddleware } from '@clerk/nextjs';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-// Define public routes that don't require authentication
-const publicRoutes = [
+const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhook/clerk',
   '/properties(.*)',
   '/rooms(.*)',
-];
+]);
 
-// Define routes that need to be ignored completely
-const ignoredRoutes = [
-  '/api/webhook/clerk',
-  '/_next(.*)',
-  '/favicon.ico',
-  '/static(.*)',
-];
+export default clerkMiddleware((auth, req) => {
+  const { userId } = auth;
 
-export default authMiddleware({
-  publicRoutes,
-  ignoredRoutes,
-  afterAuth(auth, req) {
-    // If the user is signed in and trying to access auth pages, redirect them
-    if (auth.userId && (req.nextUrl.pathname.startsWith('/sign-in') || req.nextUrl.pathname.startsWith('/sign-up'))) {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
+  // If user is signed in and tries to access sign-in/up, redirect to dashboard
+  if (
+    userId &&
+    (req.nextUrl.pathname.startsWith('/sign-in') ||
+     req.nextUrl.pathname.startsWith('/sign-up'))
+  ) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
+  }
 
-    // For everything else, just continue
+  // Allow all public routes
+  if (isPublicRoute(req)) {
     return NextResponse.next();
-  },
+  }
+
+  // All other routes require authentication
+  if (!userId) {
+    return NextResponse.redirect(new URL('/sign-in', req.url));
+  }
+
+  return NextResponse.next();
 });
 
 export const config = {
