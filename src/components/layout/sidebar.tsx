@@ -73,6 +73,11 @@ export function Sidebar() {
       icon: DollarSign,
     },
     {
+      href: "/maintenance",
+      label: "Maintenance",
+      icon: Wrench,
+    },
+    {
       href: "/calendar",
       label: "Calendar",
       icon: Calendar,
