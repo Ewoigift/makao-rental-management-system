@@ -47,20 +47,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (storedRole) {
         setUserRole(storedRole);
         setIsLoading(false);
-        handleRoleBasedRedirect(storedRole);
+        // Skip database sync if we already have the role
         return;
       }
       
-      // Sync user data with Supabase
-      await syncUserWithSupabase(user);
+      // Skip Supabase sync if we're in development and don't have a valid role key
+      // Use a temporary role for development
+      if (process.env.NODE_ENV === 'development' && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn('Development mode: Using default role');
+        const defaultRole = 'landlord'; // Default role for development
+        setUserRole(defaultRole);
+        localStorage.setItem("userRole", defaultRole);
+        handleRoleBasedRedirect(defaultRole);
+        setIsLoading(false);
+        return;
+      }
       
-      // Get user role from Supabase
-      const role = await getUserRole(user.id);
-      
-      if (role) {
-        setUserRole(role);
-        localStorage.setItem("userRole", role);
-        handleRoleBasedRedirect(role);
+      try {
+        // Sync user data with Supabase
+        await syncUserWithSupabase(user);
+        
+        // Get user role from Supabase
+        const role = await getUserRole(user.id);
+        
+        if (role) {
+          setUserRole(role);
+          localStorage.setItem("userRole", role);
+          handleRoleBasedRedirect(role);
+        }
+      } catch (supabaseError) {
+        console.error("Supabase connection error:", supabaseError);
+        
+        // Fallback for development - set a default role
+        if (process.env.NODE_ENV === 'development') {
+          const defaultRole = 'landlord'; // Default role for development
+          setUserRole(defaultRole);
+          localStorage.setItem("userRole", defaultRole);
+          handleRoleBasedRedirect(defaultRole);
+        } else {
+          throw supabaseError; // Re-throw in production
+        }
       }
     } catch (error) {
       console.error("Error syncing user with Supabase:", error);

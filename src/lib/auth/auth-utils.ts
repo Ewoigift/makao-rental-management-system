@@ -12,9 +12,20 @@ export const createSupabaseClient = () => {
 
 // Create a Supabase admin client for server-side operations
 export const createSupabaseAdminClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('Missing Supabase credentials:', { 
+      url: !!supabaseUrl, 
+      key: !!supabaseKey 
+    });
+    throw new Error('supabaseKey is required');
+  }
+  
   return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       auth: {
         autoRefreshToken: false,
