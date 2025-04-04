@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import MainLayout from '@/components/layout/main-layout';
+"use client";
+
+import { useState, useEffect } from 'react';
+import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,9 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, ArrowRight, Check, CreditCard, Receipt, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CreditCard, Receipt, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
+import { createPayment, getTenantLease, getTenantPaymentSummary } from '@/lib/db/payments-utils';
+import { formatDate } from '@/lib/utils/index';
 
 // Step-based payment flow
 const STEPS = {
@@ -23,26 +28,83 @@ export default function MakePaymentPage() {
   const router = useRouter();
   const [step, setStep] = useState(STEPS.PAYMENT_DETAILS);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useUser();
+  
+  // Tenant data state
+  const [tenantInfo, setTenantInfo] = useState({
+    name: '',
+    unit: '',
+    property: '',
+    rentAmount: '',
+    nextPaymentDue: '',
+    balance: '',
+    leaseId: '',
+    hasLease: false
+  });
   
   // Form state
   const [paymentDetails, setPaymentDetails] = useState({
-    amount: '25000',
+    amount: '',
     paymentType: 'rent',
-    month: 'May 2025',
-    reference: `RENT-${Math.floor(Math.random() * 10000)}`
+    month: '',
+    reference: `MPESA-${Math.floor(Math.random() * 10000)}`
   });
   
   const [paymentMethod, setPaymentMethod] = useState('mpesa');
   
-  // Sample tenant data - would come from database
-  const tenantInfo = {
-    name: 'John Doe',
-    unit: 'A101',
-    property: 'Sunset Apartments',
-    rentAmount: 'KES 25,000',
-    nextPaymentDue: '2025-05-01',
-    balance: 'KES 0',
-  };
+  // Fetch tenant data
+  useEffect(() => {
+    async function fetchTenantData() {
+      try {
+        if (!user?.id) return;
+        
+        setLoadingData(true);
+        setError(null);
+        
+        // Get tenant's active lease
+        const lease = await getTenantLease(user.id);
+        
+        if (!lease) {
+          setError('No active lease found. Please contact property management.');
+          setLoadingData(false);
+          return;
+        }
+        
+        // Get payment summary
+        const paymentSummary = await getTenantPaymentSummary(user.id);
+        
+        // Set tenant info
+        setTenantInfo({
+          name: user.fullName || user.firstName + ' ' + (user.lastName || ''),
+          unit: lease.unit?.unit_number || '',
+          property: lease.unit?.property?.name || '',
+          rentAmount: paymentSummary.rentAmount,
+          nextPaymentDue: paymentSummary.nextPaymentDue ? formatDate(paymentSummary.nextPaymentDue) : 'N/A',
+          balance: paymentSummary.currentBalance,
+          leaseId: lease.id,
+          hasLease: true
+        });
+        
+        // Set default payment amount
+        setPaymentDetails(prev => ({
+          ...prev,
+          amount: paymentSummary.currentBalance.replace('KSh ', '').replace(',', ''),
+          month: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        }));
+      } catch (err) {
+        console.error('Error fetching tenant data:', err);
+        setError('Failed to load tenant information. Please try again later.');
+      } finally {
+        setLoadingData(false);
+      }
+    }
+    
+    if (user) {
+      fetchTenantData();
+    }
+  }, [user]);
 
   // Handle next step
   const handleNext = () => {
@@ -63,11 +125,30 @@ export default function MakePaymentPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      if (!user?.id || !tenantInfo.leaseId) {
+        throw new Error('Missing required information');
+      }
+      
+      // Create payment in database
+      const result = await createPayment(user.id, {
+        lease_id: tenantInfo.leaseId,
+        amount: parseFloat(paymentDetails.amount),
+        payment_method: paymentMethod,
+        reference_number: paymentDetails.reference
+      });
+      
+      if (!result) {
+        throw new Error('Failed to create payment');
+      }
+      
       setStep(STEPS.COMPLETE);
-    }, 2000);
+    } catch (err) {
+      console.error('Error creating payment:', err);
+      setError('Failed to process payment. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Render payment details step
@@ -95,29 +176,25 @@ export default function MakePaymentPage() {
           
           <div>
             <Label htmlFor="month">Month</Label>
-            <Select 
-              value={paymentDetails.month} 
-              onValueChange={(value) => setPaymentDetails({...paymentDetails, month: value})}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select month" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="May 2025">May 2025</SelectItem>
-                <SelectItem value="June 2025">June 2025</SelectItem>
-                <SelectItem value="July 2025">July 2025</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              id="month"
+              type="text"
+              value={paymentDetails.month}
+              onChange={(e) => setPaymentDetails({...paymentDetails, month: e.target.value})}
+              disabled
+            />
+            <p className="text-xs text-gray-500 mt-1">Current billing month</p>
           </div>
           
           <div>
-            <Label htmlFor="amount">Amount (KES)</Label>
+            <Label htmlFor="amount">Amount (KSh)</Label>
             <Input 
               id="amount" 
               type="text" 
               value={paymentDetails.amount} 
               onChange={(e) => setPaymentDetails({...paymentDetails, amount: e.target.value})}
             />
+            <p className="text-xs text-gray-500 mt-1">Suggested amount based on your current balance</p>
           </div>
           
           <div>
@@ -201,7 +278,7 @@ export default function MakePaymentPage() {
               <li>Select "Pay Bill"</li>
               <li>Enter Business Number: <span className="font-bold">123456</span></li>
               <li>Enter Account Number: <span className="font-bold">{paymentDetails.reference}</span></li>
-              <li>Enter Amount: <span className="font-bold">KES {paymentDetails.amount}</span></li>
+              <li>Enter Amount: <span className="font-bold">KSh {parseFloat(paymentDetails.amount).toLocaleString()}</span></li>
               <li>Enter your M-Pesa PIN and confirm payment</li>
             </ol>
           </div>
@@ -238,7 +315,7 @@ export default function MakePaymentPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Amount:</span>
-              <span className="font-medium">KES {paymentDetails.amount}</span>
+              <span className="font-medium">KSh {parseFloat(paymentDetails.amount).toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Payment Method:</span>
@@ -356,53 +433,198 @@ export default function MakePaymentPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-3xl mx-auto">
+      <div className="container mx-auto py-6 max-w-3xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Make a Payment</h1>
-          <p className="text-gray-500">Complete the form below to make a payment</p>
+          <Link href="/tenant/payments/history" className="text-primary hover:underline inline-flex items-center">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Payment History
+          </Link>
+          <h1 className="text-3xl font-bold mt-2">Make a Payment</h1>
         </div>
         
-        {/* Progress indicator */}
-        {step < STEPS.COMPLETE && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.PAYMENT_DETAILS ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                  1
-                </div>
-                <div className={`h-1 w-12 ${step > STEPS.PAYMENT_DETAILS ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-              </div>
-              <div className="flex items-center">
-                <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.PAYMENT_METHOD ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                  2
-                </div>
-                <div className={`h-1 w-12 ${step > STEPS.PAYMENT_METHOD ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-              </div>
-              <div className="flex items-center">
-                <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.CONFIRMATION ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                  3
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-between text-sm mt-2">
-              <span className={step >= STEPS.PAYMENT_DETAILS ? 'text-blue-600 font-medium' : 'text-gray-500'}>
-                Payment Details
-              </span>
-              <span className={step >= STEPS.PAYMENT_METHOD ? 'text-blue-600 font-medium' : 'text-gray-500'}>
-                Payment Method
-              </span>
-              <span className={step >= STEPS.CONFIRMATION ? 'text-blue-600 font-medium' : 'text-gray-500'}>
-                Confirmation
-              </span>
-            </div>
+        {loadingData ? (
+          <div className="flex justify-center items-center h-60">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
+        ) : error ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </CardContent>
+          </Card>
+        ) : !tenantInfo.hasLease ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <p className="text-muted-foreground mb-4">You don't have an active lease. Please contact property management.</p>
+              <Button asChild>
+                <Link href="/tenant/dashboard">Go to Dashboard</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <Card className="mb-6">
+              <CardHeader className="pb-2">
+                <CardTitle>Payment Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <dt className="font-medium text-gray-500">Tenant</dt>
+                    <dd>{tenantInfo.name}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-500">Unit</dt>
+                    <dd>{tenantInfo.unit}, {tenantInfo.property}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-500">Monthly Rent</dt>
+                    <dd>{tenantInfo.rentAmount}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-500">Next Payment Due</dt>
+                    <dd>{tenantInfo.nextPaymentDue}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-500">Current Balance</dt>
+                    <dd className="font-semibold">{tenantInfo.balance}</dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+            
+            {/* Progress indicator */}
+            {step < STEPS.COMPLETE && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.PAYMENT_DETAILS ? 'bg-primary text-white' : 'bg-muted'}`}>
+                      1
+                    </div>
+                    <div className={`h-1 w-12 ${step > STEPS.PAYMENT_DETAILS ? 'bg-primary' : 'bg-muted'}`}></div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.PAYMENT_METHOD ? 'bg-primary text-white' : 'bg-muted'}`}>
+                      2
+                    </div>
+                    <div className={`h-1 w-12 ${step > STEPS.PAYMENT_METHOD ? 'bg-primary' : 'bg-muted'}`}></div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className={`rounded-full h-8 w-8 flex items-center justify-center ${step >= STEPS.CONFIRMATION ? 'bg-primary text-white' : 'bg-muted'}`}>
+                      3
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm mt-2">
+                  <span className={step >= STEPS.PAYMENT_DETAILS ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                    Payment Details
+                  </span>
+                  <span className={step >= STEPS.PAYMENT_METHOD ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                    Payment Method
+                  </span>
+                  <span className={step >= STEPS.CONFIRMATION ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                    Confirmation
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {step === STEPS.PAYMENT_DETAILS && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {renderPaymentDetails()}
+                </CardContent>
+              </Card>
+            )}
+            
+            {step === STEPS.PAYMENT_METHOD && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment Method</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {renderPaymentMethod()}
+                </CardContent>
+                <CardFooter className="flex justify-between">
+                  <Button variant="outline" onClick={handlePrevious}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                </CardFooter>
+              </Card>
+            )}
+            
+            {step === STEPS.CONFIRMATION && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Confirm Payment</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {renderConfirmation()}
+                </CardContent>
+                <CardFooter className="flex justify-between">
+                  <Button variant="outline" onClick={handlePrevious}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                </CardFooter>
+              </Card>
+            )}
+            
+            {step === STEPS.COMPLETE && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center">Payment Successful</CardTitle>
+                </CardHeader>
+                <CardContent className="text-center py-6">
+                  <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <Check className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h3 className="text-xl font-medium mb-2">Thank You!</h3>
+                  <p className="text-gray-500 mb-6">Your payment has been successfully processed.</p>
+                  
+                  <div className="bg-gray-50 rounded-lg p-4 max-w-md mx-auto mb-6">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-500">Reference:</span>
+                      <span className="font-medium">{paymentDetails.reference}</span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-500">Amount:</span>
+                      <span className="font-medium">KSh {parseFloat(paymentDetails.amount).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-500">Date:</span>
+                      <span className="font-medium">{new Date().toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Status:</span>
+                      <span className="font-medium text-yellow-600">Pending</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Button variant="outline" asChild>
+                      <Link href="/tenant/payments/history">
+                        <Receipt className="mr-2 h-4 w-4" />
+                        View Payment History
+                      </Link>
+                    </Button>
+                    <Button asChild>
+                      <Link href="/tenant/dashboard">
+                        Go to Dashboard
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
-        
-        <Card>
-          <CardContent className="p-6">
-            {renderStepContent()}
-          </CardContent>
-        </Card>
       </div>
     </MainLayout>
   );

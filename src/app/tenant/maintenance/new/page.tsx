@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import MainLayout from '@/components/layout/main-layout';
+"use client";
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,26 +9,54 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Check, Loader2, Tool, Upload } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, PenToolIcon, Upload, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useUser } from '@clerk/nextjs';
+import { createMaintenanceRequest, getTenantUnit } from '@/lib/db/maintenance-utils';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { MainLayout } from '@/components/layout/main-layout';
 
 export default function NewMaintenanceRequestPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [images, setImages] = useState([]);
+  const [images, setImages] = useState<Array<{ file: File; preview: string; name: string }>>([]);
+  const [tenantUnit, setTenantUnit] = useState<any>(null);
+  const [loadingUnit, setLoadingUnit] = useState(true);
+  const { user } = useUser();
+  const router = useRouter();
   
   // Form state
   const [formData, setFormData] = useState({
-    category: '',
     title: '',
     description: '',
-    priority: 'normal',
+    priority: 'medium',
     preferredDate: '',
     preferredTime: '',
     allowEntry: false,
     contactPhone: ''
   });
+  
+  // Fetch tenant's unit
+  useEffect(() => {
+    async function fetchTenantUnit() {
+      try {
+        if (!user?.id) return;
+        
+        const unit = await getTenantUnit(user.id);
+        setTenantUnit(unit);
+      } catch (error) {
+        console.error('Error fetching tenant unit:', error);
+      } finally {
+        setLoadingUnit(false);
+      }
+    }
+    
+    if (user) {
+      fetchTenantUnit();
+    }
+  }, [user]);
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -46,9 +75,11 @@ export default function NewMaintenanceRequestPage() {
     });
   };
 
-  // Handle image upload
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
+  // Handle file upload
+  const handleFileUpload = (e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const files = Array.from(e.target.files) as File[];
     
     // Create preview URLs for the images
     const newImages = files.map(file => ({
@@ -71,42 +102,41 @@ export default function NewMaintenanceRequestPage() {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    if (!user || !tenantUnit) {
+      toast.error('Unable to submit request. Please try again later.');
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      // Create the maintenance request
+      const result = await createMaintenanceRequest(user.id, {
+        unit_id: tenantUnit.id,
+        title: formData.title,
+        description: formData.description,
+        priority: formData.priority
+      });
+      
+      if (result) {
+        setIsSubmitted(true);
+        toast.success('Maintenance request submitted successfully!');
+      } else {
+        throw new Error('Failed to create maintenance request');
+      }
+    } catch (error) {
+      console.error('Error submitting maintenance request:', error);
+      toast.error('Failed to submit maintenance request. Please try again.');
+    } finally {
       setIsLoading(false);
-      setIsSubmitted(true);
-    }, 1500);
+    }
   };
 
   // Render form
   const renderForm = () => (
     <form onSubmit={handleSubmit}>
       <div className="space-y-6">
-        <div>
-          <Label htmlFor="category">Category</Label>
-          <Select 
-            name="category"
-            value={formData.category} 
-            onValueChange={(value) => setFormData({...formData, category: value})}
-            required
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select issue category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="plumbing">Plumbing</SelectItem>
-              <SelectItem value="electrical">Electrical</SelectItem>
-              <SelectItem value="appliance">Appliance</SelectItem>
-              <SelectItem value="hvac">HVAC / Air Conditioning</SelectItem>
-              <SelectItem value="structural">Structural</SelectItem>
-              <SelectItem value="pest">Pest Control</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
         <div>
           <Label htmlFor="title">Issue Title</Label>
           <Input 
@@ -119,17 +149,18 @@ export default function NewMaintenanceRequestPage() {
           />
         </div>
         
-        <div>
-          <Label htmlFor="description">Description</Label>
-          <Textarea 
-            id="description" 
-            name="description"
-            placeholder="Please describe the issue in detail" 
-            rows={4}
-            value={formData.description}
-            onChange={handleInputChange}
-            required
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="space-y-2 mb-4">
+            <Label htmlFor="description">Issue Description</Label>
+            <Textarea 
+              id="description"
+              placeholder="Please describe the issue in detail"
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              rows={4}
+              required
+            />
+          </div>
         </div>
         
         <div>
@@ -144,8 +175,8 @@ export default function NewMaintenanceRequestPage() {
               <Label htmlFor="low">Low</Label>
             </div>
             <div className="flex items-center space-x-2">
-              <RadioGroupItem value="normal" id="normal" />
-              <Label htmlFor="normal">Normal</Label>
+              <RadioGroupItem value="medium" id="medium" />
+              <Label htmlFor="medium">Medium</Label>
             </div>
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="high" id="high" />
@@ -234,7 +265,7 @@ export default function NewMaintenanceRequestPage() {
                   accept="image/*"
                   multiple
                   className="hidden"
-                  onChange={handleImageUpload}
+                  onChange={handleFileUpload}
                 />
               </label>
             </div>
@@ -296,76 +327,59 @@ export default function NewMaintenanceRequestPage() {
 
   // Render success message
   const renderSuccess = () => (
-    <div className="text-center space-y-6">
-      <div className="bg-green-100 p-6 rounded-full mx-auto w-24 h-24 flex items-center justify-center">
-        <Check className="h-12 w-12 text-green-600" />
-      </div>
-      
-      <div>
-        <h2 className="text-2xl font-bold">Request Submitted</h2>
-        <p className="text-gray-500 mt-2">
-          Your maintenance request has been submitted successfully.
-        </p>
-      </div>
-      
-      <div className="bg-gray-50 p-6 rounded-md text-left">
-        <h3 className="font-medium mb-4">Request Details</h3>
-        <div className="space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <p className="text-sm text-gray-500">Category</p>
-              <p className="font-medium capitalize">{formData.category}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Priority</p>
-              <p className="font-medium capitalize">{formData.priority}</p>
-            </div>
+    <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
+      <Card className="max-w-md w-full">
+        <CardContent className="pt-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <Check className="h-6 w-6 text-green-600" />
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Issue</p>
-            <p className="font-medium">{formData.title}</p>
+          <h2 className="text-2xl font-bold mb-2">Request Submitted</h2>
+          <p className="text-muted-foreground mb-6">Your maintenance request has been submitted successfully. We'll get back to you soon.</p>
+          <div className="space-y-2">
+            <Button className="w-full" asChild>
+              <Link href="/tenant/maintenance">View All Requests</Link>
+            </Button>
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/tenant/dashboard">Back to Dashboard</Link>
+            </Button>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Description</p>
-            <p className="text-sm">{formData.description}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Request ID</p>
-            <p className="font-medium">MR-{Math.floor(Math.random() * 10000).toString().padStart(4, '0')}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Status</p>
-            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-              Submitted
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex justify-center space-x-4">
-        <Button variant="outline" asChild>
-          <Link href="/tenant/maintenance">View All Requests</Link>
-        </Button>
-        <Button asChild>
-          <Link href="/tenant/dashboard">Back to Dashboard</Link>
-        </Button>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 
   return (
     <MainLayout>
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Submit Maintenance Request</h1>
-          <p className="text-gray-500">Report an issue with your unit</p>
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex items-center gap-2">
+          <Link href="/tenant/maintenance" className="text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <h1 className="text-2xl font-bold">New Maintenance Request</h1>
         </div>
         
-        <Card>
-          <CardContent className="p-6">
-            {isSubmitted ? renderSuccess() : renderForm()}
-          </CardContent>
-        </Card>
+        {loadingUnit ? (
+          <div className="flex justify-center items-center h-60">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : !tenantUnit ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">No Unit Assigned</h2>
+              <p className="text-muted-foreground mb-6">You don't have any units assigned to your account. Please contact your property manager.</p>
+              <Link href="/tenant/dashboard">
+                <Button>Return to Dashboard</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-6">
+              {isSubmitted ? renderSuccess() : renderForm()}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </MainLayout>
   );

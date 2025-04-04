@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth/auth-provider";
 import { MainLayout } from "@/components/layout/main-layout";
 
 export default function ProtectedLayout({
@@ -12,27 +13,49 @@ export default function ProtectedLayout({
 }) {
   const router = useRouter();
 
+  const { isSignedIn, isLoaded } = useUser();
+  const { userRole, isLoading } = useAuth();
+
   useEffect(() => {
-    // Check auth state on mount
-    const { data: { session } } = supabase.auth.getSession();
-    if (!session) {
-      router.push("/auth/login");
+    // Only check after Clerk has loaded
+    if (!isLoaded || isLoading) return;
+
+    // If not signed in, redirect to sign-in
+    if (!isSignedIn) {
+      router.push("/sign-in");
+      return;
     }
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.push("/auth/login");
+    // If signed in and we have a role, redirect to the appropriate dashboard
+    if (isSignedIn && userRole && !isLoading) {
+      if (userRole === 'tenant') {
+        router.push('/tenant/dashboard');
+      } else if (userRole === 'admin' || userRole === 'landlord') {
+        router.push('/admin/dashboard');
+      } else {
+        // If we have an invalid role, default to tenant
+        console.log('Invalid role found:', userRole, 'defaulting to tenant');
+        router.push('/tenant/dashboard');
       }
-    });
+      return;
+    }
+    
+    // If signed in but no role yet, default to tenant
+    if (isSignedIn && !userRole && !isLoading) {
+      console.log('No role found yet, defaulting to tenant');
+      router.push('/tenant/dashboard');
+      return;
+    }
+  }, [isSignedIn, isLoaded, userRole, isLoading, router]);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
+  // Show nothing while loading
+  if (isLoading || !isLoaded || !isSignedIn) {
+    return null;
+  }
 
   return (
     <MainLayout>
       {children}
     </MainLayout>
   );
+}

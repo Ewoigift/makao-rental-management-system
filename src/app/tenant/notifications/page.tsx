@@ -6,7 +6,7 @@ import {
   Bell, 
   CheckCircle, 
   Clock, 
-  Tool, 
+  PenToolIcon, 
   AlertCircle, 
   DollarSign,
   Megaphone
@@ -112,7 +112,7 @@ export default function NotificationsPage() {
       case 'payment':
         return <DollarSign className="h-5 w-5 text-blue-500" />;
       case 'maintenance':
-        return <Tool className="h-5 w-5 text-orange-500" />;
+        return <PenToolIcon className="h-5 w-5 text-orange-500" />;
       case 'announcement':
         return <Megaphone className="h-5 w-5 text-purple-500" />;
       case 'alert':

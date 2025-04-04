@@ -38,27 +38,18 @@ import * as z from "zod";
 const propertyFormSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, { message: "Property name must be at least 3 characters." }),
-  location: z.string().min(5, { message: "Location must be at least 5 characters." }),
+  address: z.string().min(5, { message: "Address must be at least 5 characters." }),
+  city: z.string().min(2, { message: "City must be at least 2 characters." }),
+  county: z.string().min(2, { message: "County must be at least 2 characters." }),
   description: z.string().optional(),
-  property_type: z.enum(["apartment", "house", "commercial", "mixed"]),
-  status: z.enum(["active", "inactive", "maintenance"]).default("active"),
+  property_type: z.enum(["apartment", "house", "commercial", "mixed_use"]),
   total_units: z.coerce
     .number()
     .min(1, { message: "Total units must be at least 1" })
     .int({ message: "Total units must be a whole number" }),
-  year_built: z.coerce
-    .number()
-    .min(1900, { message: "Year built must be after 1900" })
-    .max(new Date().getFullYear(), { message: "Year built cannot be in the future" })
-    .optional(),
-  purchase_price: z.coerce
-    .number()
-    .min(0, { message: "Purchase price must be a positive number" })
-    .optional(),
-  monthly_expenses: z.coerce
-    .number()
-    .min(0, { message: "Monthly expenses must be a positive number" })
-    .optional(),
+  owner_id: z.string().optional(),
+  manager_id: z.string().optional(),
+  amenities: z.any().optional(),
 });
 
 // Create a TypeScript type from the zod schema
@@ -84,14 +75,13 @@ export default function PropertyModal({
     resolver: zodResolver(propertyFormSchema),
     defaultValues: {
       name: "",
-      location: "",
+      address: "",
+      city: "",
+      county: "",
       description: "",
       property_type: "apartment",
-      status: "active",
       total_units: 1,
-      year_built: undefined,
-      purchase_price: undefined,
-      monthly_expenses: undefined,
+      amenities: {},
     },
   });
 
@@ -104,14 +94,13 @@ export default function PropertyModal({
       // Reset form to defaults when adding new
       form.reset({
         name: "",
-        location: "",
+        address: "",
+        city: "",
+        county: "",
         description: "",
         property_type: "apartment",
-        status: "active",
         total_units: 1,
-        year_built: undefined, 
-        purchase_price: undefined,
-        monthly_expenses: undefined,
+        amenities: {},
       });
     }
   }, [propertyData, mode, form]);
@@ -190,7 +179,7 @@ export default function PropertyModal({
                           <SelectItem value="apartment">Apartment Building</SelectItem>
                           <SelectItem value="house">House</SelectItem>
                           <SelectItem value="commercial">Commercial</SelectItem>
-                          <SelectItem value="mixed">Mixed Use</SelectItem>
+                          <SelectItem value="mixed_use">Mixed Use</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -199,14 +188,14 @@ export default function PropertyModal({
                 )}
               />
 
-              {/* Location */}
+              {/* Address */}
               <FormField
                 control={form.control}
-                name="location"
+                name="address"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" /> Location*
+                      <MapPin className="h-4 w-4" /> Address*
                     </FormLabel>
                     <FormControl>
                       <Input 
@@ -219,34 +208,51 @@ export default function PropertyModal({
                   </FormItem>
                 )}
               />
-
-              {/* Status */}
+              
+              {/* City */}
               <FormField
                 control={form.control}
-                name="status"
+                name="city"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
+                    <FormLabel className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" /> City*
+                    </FormLabel>
                     <FormControl>
-                      <Select 
+                      <Input 
+                        placeholder="Enter city" 
+                        {...field} 
                         disabled={mode === "view"}
-                        onValueChange={field.onChange} 
-                        value={field.value}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                          <SelectItem value="maintenance">Under Maintenance</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              
+              {/* County */}
+              <FormField
+                control={form.control}
+                name="county"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" /> County*
+                    </FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Enter county" 
+                        {...field} 
+                        disabled={mode === "view"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* This space intentionally left empty to balance grid */}
+              <div></div>
 
               {/* Total Units */}
               <FormField
@@ -270,26 +276,8 @@ export default function PropertyModal({
                 )}
               />
 
-              {/* Year Built */}
-              <FormField
-                control={form.control}
-                name="year_built"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Year Built</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="e.g. 2005"
-                        {...field} 
-                        value={field.value || ""}
-                        disabled={mode === "view"}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Additional field can be added here in the future */}
+              <div></div>
             </div>
 
             {/* Description */}
@@ -313,54 +301,6 @@ export default function PropertyModal({
                 </FormItem>
               )}
             />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Purchase Price */}
-              <FormField
-                control={form.control}
-                name="purchase_price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Purchase Price ($)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="0"
-                        step="0.01"
-                        placeholder="e.g. $250,000"
-                        {...field} 
-                        value={field.value || ""}
-                        disabled={mode === "view"}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Monthly Expenses */}
-              <FormField
-                control={form.control}
-                name="monthly_expenses"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monthly Expenses ($)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="0"
-                        step="0.01"
-                        placeholder="e.g. $1,500"
-                        {...field} 
-                        value={field.value || ""}
-                        disabled={mode === "view"}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
             {/* Form Buttons */}
             <div className="flex justify-end gap-2 pt-4">

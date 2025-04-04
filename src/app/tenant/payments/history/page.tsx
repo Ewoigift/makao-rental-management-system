@@ -1,115 +1,135 @@
-import MainLayout from '@/components/layout/main-layout';
+"use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Filter, Search } from 'lucide-react';
+import { Download, Filter, Search, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/nextjs';
+import { getTenantPayments, Payment } from '@/lib/db/payments-utils';
+import { formatDate } from '@/lib/utils/index';
+import { MainLayout } from '@/components/layout/main-layout';
 
 export default function PaymentHistoryPage() {
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useUser();
   
-  // Sample payment history data - would come from database
-  const allPayments = [
-    { 
-      id: 'PAY-2025-042', 
-      date: '2025-04-01', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'April 2025',
-      method: 'M-Pesa', 
-      reference: 'MPESA-XYZ123', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2025-031', 
-      date: '2025-03-01', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'March 2025',
-      method: 'Bank Transfer', 
-      reference: 'BANK-ABC456', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2025-021', 
-      date: '2025-02-03', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'February 2025',
-      method: 'M-Pesa', 
-      reference: 'MPESA-DEF789', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2025-011', 
-      date: '2025-01-02', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'January 2025',
-      method: 'Credit Card', 
-      reference: 'CARD-GHI012', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2024-121', 
-      date: '2024-12-01', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'December 2024',
-      method: 'M-Pesa', 
-      reference: 'MPESA-JKL345', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2024-111', 
-      date: '2024-11-05', 
-      amount: 'KES 25,000', 
-      type: 'Rent', 
-      month: 'November 2024',
-      method: 'Bank Transfer', 
-      reference: 'BANK-MNO678', 
-      status: 'verified' 
-    },
-    { 
-      id: 'PAY-2024-101', 
-      date: '2024-10-02', 
-      amount: 'KES 5,000', 
-      type: 'Utilities', 
-      month: 'October 2024',
-      method: 'M-Pesa', 
-      reference: 'MPESA-PQR901', 
-      status: 'verified' 
-    },
-  ];
+  // Fetch payments from database
+  useEffect(() => {
+    async function fetchPayments() {
+      try {
+        if (!user?.id) return;
+        
+        setLoading(true);
+        setError(null);
+        const paymentData = await getTenantPayments(user.id);
+        setPayments(paymentData);
+      } catch (err) {
+        console.error('Error fetching payments:', err);
+        setError('Failed to load payment history. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    if (user) {
+      fetchPayments();
+    }
+  }, [user]);
   
   // Filter payments based on selected filter and search query
-  const filteredPayments = allPayments.filter(payment => {
+  const filteredPayments = payments.filter(payment => {
     const matchesFilter = filter === 'all' || payment.status === filter;
-    const matchesSearch = 
+    const matchesSearch = searchQuery === '' || (
       payment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.month.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.type.toLowerCase().includes(searchQuery.toLowerCase());
+      payment.reference_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      payment.payment_method.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (payment.lease?.unit?.property?.name && 
+        payment.lease.unit.property.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
     
     return matchesFilter && matchesSearch;
   });
 
   // Get payment status badge color
-  const getStatusBadgeColor = (status) => {
+  const getStatusBadgeColor = (status: string) => {
     switch(status) {
-      case 'verified':
+      case 'completed':
         return 'bg-green-100 text-green-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
       case 'rejected':
         return 'bg-red-100 text-red-800';
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
+  
+  // Format payment status
+  const formatStatus = (status: string) => {
+    switch(status) {
+      case 'completed': return 'Completed';
+      case 'pending': return 'Pending';
+      case 'rejected': return 'Rejected';
+      case 'cancelled': return 'Cancelled';
+      default: return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+  };
+  
+  // Format payment type
+  const getPaymentType = (payment: Payment) => {
+    return 'Rent';
+  };
+  
+  // Format payment month
+  const getPaymentMonth = (payment: Payment) => {
+    const date = new Date(payment.payment_date);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+  
+  // Calculate payment summary
+  const calculatePaymentSummary = () => {
+    if (payments.length === 0) {
+      return {
+        totalAmount: 0,
+        totalCount: 0,
+        latestPayment: { amount: 0, date: 'N/A' },
+        nextDueDate: 'N/A'
+      };
+    }
+    
+    const totalAmount = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const sortedPayments = [...payments].sort((a, b) => 
+      new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
+    );
+    
+    const latestPayment = sortedPayments[0];
+    const latestDate = new Date(latestPayment.payment_date);
+    
+    // Calculate next due date (assume monthly payments, due on the same day of next month)
+    const nextDueDate = new Date(latestDate);
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+    
+    return {
+      totalAmount,
+      totalCount: payments.length,
+      latestPayment: {
+        amount: latestPayment.amount,
+        date: formatDate(latestPayment.payment_date)
+      },
+      nextDueDate: formatDate(nextDueDate.toISOString())
+    };
+  };
+  
+  const paymentSummary = calculatePaymentSummary();
 
   return (
     <MainLayout>
@@ -122,6 +142,39 @@ export default function PaymentHistoryPage() {
           <Button asChild>
             <Link href="/tenant/payments/make">Make a Payment</Link>
           </Button>
+        </div>
+        
+        {/* Payment summary cards - moved to top */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Total Payments ({new Date().getFullYear()})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">KES {paymentSummary.totalAmount.toLocaleString()}</div>
+              <p className="text-xs text-gray-500 mt-1">{paymentSummary.totalCount} payments</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Latest Payment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">KES {paymentSummary.latestPayment.amount.toLocaleString()}</div>
+              <p className="text-xs text-gray-500 mt-1">{paymentSummary.latestPayment.date}</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Next Payment Due</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">KES {payments.length > 0 ? payments[0].amount.toLocaleString() : '0'}</div>
+              <p className="text-xs text-gray-500 mt-1">{paymentSummary.nextDueDate}</p>
+            </CardContent>
+          </Card>
         </div>
         
         {/* Filters and search */}
@@ -151,55 +204,67 @@ export default function PaymentHistoryPage() {
           </div>
         </div>
         
-        {/* Payment history table */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Payment Records</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receipt</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredPayments.length > 0 ? (
-                    filteredPayments.map((payment) => (
-                      <tr key={payment.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap font-medium">{payment.id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.date}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.amount}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.type}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.month}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.method}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.reference}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(payment.status)}`}>
-                            {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <Download className="h-4 w-4" />
-                            <span className="sr-only">Download receipt</span>
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+        {loading ? (
+          <div className="flex justify-center items-center h-60">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Payment Records</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredPayments.length > 0 ? (
+                      filteredPayments.map((payment) => (
+                        <tr key={payment.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">{payment.id.substring(0, 10)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{formatDate(payment.payment_date)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">KSh {payment.amount.toLocaleString()}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{getPaymentType(payment)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{getPaymentMonth(payment)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{payment.payment_method}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{payment.reference_number}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(payment.status)}`}>
+                              {formatStatus(payment.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Download className="h-4 w-4" />
+                              <span className="sr-only">Download receipt</span>
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
                     <tr>
-                      <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
-                        No payment records found
+                      <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                        {payments.length === 0 ? 'No payment history found.' : 'No payments found matching your filters.'}
                       </td>
                     </tr>
                   )}
@@ -208,39 +273,10 @@ export default function PaymentHistoryPage() {
             </div>
           </CardContent>
         </Card>
+        )
+      }
         
-        {/* Payment summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Payments (2025)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">KES 100,000</div>
-              <p className="text-xs text-gray-500 mt-1">4 payments</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Latest Payment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">KES 25,000</div>
-              <p className="text-xs text-gray-500 mt-1">April 1, 2025</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Next Payment Due</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">KES 25,000</div>
-              <p className="text-xs text-gray-500 mt-1">May 1, 2025</p>
-            </CardContent>
-          </Card>
-        </div>
+
         
         {/* Payment instructions */}
         <Card className="bg-blue-50 border-blue-100">

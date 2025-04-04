@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from "react";
+import TenantDialog from "@/components/tenants/tenant-dialog";
 import { Badge } from "@/components/ui/badge";
 
 // Types based on Supabase schema
@@ -58,6 +59,9 @@ export default function TenantsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'view' | 'edit'>('view');
 
   // Fetch tenants from Supabase
   useEffect(() => {
@@ -66,19 +70,41 @@ export default function TenantsPage() {
         setLoading(true);
         const { supabase } = await import('@/lib/supabase/client');
         
-        const { data, error } = await supabase
+        // First try to fetch using clerk_id for newer users
+        let { data, error } = await supabase
           .from('users')
           .select(`
             *,
             leases(*, unit:units(*, property:properties(id, name, address)))
           `)
-          .eq('user_type', 'tenant');
+          .or('role.eq.tenant,user_type.eq.tenant');
         
-        if (error) throw error;
+        // If no data or specific error, try alternative approach
+        if (error) {
+          console.warn('Initial fetch failed, trying alternate approach:', error);
+          // Try just getting all users
+          const { data: allUsers, error: allUsersError } = await supabase
+            .from('users')
+            .select('*');
+            
+          if (allUsersError) {
+            throw allUsersError;
+          }
+          
+          // Filter tenant users client-side
+          data = allUsers.filter(user => 
+            user.user_type === 'tenant' || user.role === 'tenant'
+          );
+          
+          console.log('Fallback approach found:', data?.length, 'tenants');
+        }
         
-        if (data) {
+        if (data && data.length > 0) {
+          console.log('Tenants data loaded:', data.length, 'tenants found');
           setTenants(data);
           setFilteredTenants(data);
+        } else {
+          console.log('No tenants found or access denied');
         }
       } catch (error) {
         console.error('Error fetching tenants:', error);
@@ -90,7 +116,7 @@ export default function TenantsPage() {
     fetchTenants();
   }, []);
   
-  // Sample data - uncomment if needed during development
+  // Sample data - commented out as we're using real data
   /*
   const demoTenants: Tenant[] = [
       {
@@ -186,32 +212,10 @@ export default function TenantsPage() {
     //
     //     setTenants(formattedTenants);
     //     setFilteredTenants(formattedTenants);
-    //   } catch (error) {
-    //     console.error('Error fetching tenants:', error);
-    //   } finally {
-    //     setLoading(false);
-    //   }
-    // }
-    //
-    // fetchTenants();
-  // }, []);
 
-  // Filter tenants based on search and status
+  // Filter tenants based on status
   useEffect(() => {
-    let results = tenants;
-    
-    if (searchQuery) {
-      const lowercaseQuery = searchQuery.toLowerCase();
-      results = results.filter(tenant => 
-        (tenant.full_name?.toLowerCase() || '').includes(lowercaseQuery) ||
-        (tenant.email?.toLowerCase() || '').includes(lowercaseQuery) ||
-        (tenant.phone_number?.toLowerCase() || '').includes(lowercaseQuery) ||
-        tenant.leases?.some(lease => 
-          (lease.unit?.unit_number?.toLowerCase() || '').includes(lowercaseQuery) ||
-          (lease.unit?.property?.name?.toLowerCase() || '').includes(lowercaseQuery)
-        )
-      );
-    }
+    let results = filteredTenants;
     
     if (statusFilter) {
       // Filter by lease status
@@ -221,7 +225,7 @@ export default function TenantsPage() {
     }
     
     setFilteredTenants(results);
-  }, [searchQuery, statusFilter, tenants]);
+  }, [statusFilter, filteredTenants]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -255,7 +259,13 @@ export default function TenantsPage() {
             <h1 className="text-3xl font-bold">Tenants</h1>
             <p className="text-gray-500">Manage your property tenants</p>
           </div>
-          <Button className="flex items-center gap-2">
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => {
+              setSelectedTenantId(null);
+              setDialogOpen(true);
+            }}
+          >
             <Plus className="h-4 w-4" />
             Add New Tenant
           </Button>
@@ -330,62 +340,102 @@ export default function TenantsPage() {
                 <p className="text-gray-500 mt-1">Try adjusting your search or filters</p>
               </div>
             ) : (
-              <table className="w-full">
+              <table className="min-w-full bg-white">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-4 font-medium">Name</th>
-                    <th className="text-left p-4 font-medium">Contact</th>
-                    <th className="text-left p-4 font-medium">Unit</th>
-                    <th className="text-left p-4 font-medium">Property</th>
-                    <th className="text-left p-4 font-medium">Lease Period</th>
-                    <th className="text-left p-4 font-medium">Rent</th>
-                    <th className="text-left p-4 font-medium">Status</th>
-                    <th className="text-left p-4 font-medium">Actions</th>
+                  <tr className="bg-gray-100">
+                    <th className="p-2 border-b text-center w-12">#</th>
+                    <th className="p-2 border-b text-left">Name</th>
+                    <th className="p-2 border-b text-left">Email</th>
+                    <th className="p-2 border-b text-left">Phone</th>
+                    <th className="p-2 border-b text-left">Join Date</th>
+                    <th className="p-2 border-b text-left">Unit</th>
+                    <th className="p-2 border-b text-right w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTenants.map((tenant) => (
+                  {filteredTenants.map((tenant, index) => (
                     <tr key={tenant.id} className="border-b hover:bg-muted/50">
-                       <td className="p-4 font-medium">{tenant.full_name || 'N/A'}</td>
-                      <td className="p-4">
-                        <div className="flex flex-col space-y-1">
-                          <div className="flex items-center gap-1">
-                            <Mail className="h-3 w-3 text-gray-500" />
-                            <a href={`mailto:${tenant.email}`} className="text-sm text-blue-600 hover:underline">
-                              {tenant.email || 'N/A'}
-                            </a>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-gray-500" />
-                            <span className="text-sm text-gray-600">{tenant.phone_number || 'N/A'}</span>
-                          </div>
+                      <td className="p-2 border-b text-center">
+                        {index + 1}
+                      </td>
+                      <td className="p-2 border-b">
+                        <div className="flex items-center gap-2">
+                          {tenant.profile_picture_url ? (
+                            <img 
+                              src={tenant.profile_picture_url} 
+                              alt={tenant.full_name} 
+                              className="h-8 w-8 rounded-full object-cover border border-gray-200"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                              {tenant.full_name?.charAt(0)?.toUpperCase() || "T"}
+                            </div>
+                          )}
+                          <span className="font-medium">{tenant.full_name}</span>
                         </div>
                       </td>
-                      <td className="p-4">
-                        {tenant.leases && tenant.leases.length > 0 ? 
-                          tenant.leases[0].unit?.unit_number || 'N/A' : 'No unit'}
+                      <td className="p-2 border-b">
+                        <a href={`mailto:${tenant.email}`} className="text-sm text-blue-600 hover:underline">
+                          {tenant.email || 'N/A'}
+                        </a>
                       </td>
-                      <td className="p-4">
-                        {tenant.leases && tenant.leases.length > 0 ? 
-                          tenant.leases[0].unit?.property?.name || 'N/A' : 'No property'}
+                      <td className="p-2 border-b">
+                        <span className="text-sm text-gray-600">{tenant.phone_number || 'N/A'}</span>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm">
-                          {tenant.leases && tenant.leases.length > 0 ? 
-                            `${formatDate(tenant.leases[0].start_date)} — ${formatDate(tenant.leases[0].end_date)}` : 'No lease'}
-                        </div>
+                      <td className="p-2 border-b">
+                        <span className="text-sm">{formatDate(tenant.created_at)}</span>
                       </td>
-                      <td className="p-4">
-                        {tenant.leases && tenant.leases.length > 0 ? 
-                          `$${tenant.leases[0].rent_amount.toFixed(2)}` : 'N/A'}
+                      <td className="p-2 border-b">
+                        {tenant.leases && tenant.leases.length > 0 && tenant.leases[0].unit ? (
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100">
+                              Allocated
+                            </Badge>
+                            <div className="text-sm">
+                              <div>{tenant.leases[0].unit.unit_number}</div>
+                              <div className="text-gray-500">{tenant.leases[0].unit.property?.name}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100">
+                              Not Allocated
+                            </Badge>
+                          </div>
+                        )}
                       </td>
-                      <td className="p-4">
-                        {tenant.leases && tenant.leases.length > 0 ? 
-                          getStatusBadge(tenant.leases[0].status) : 
-                          <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">No lease</Badge>}
-                      </td>
-                      <td className="p-4">
-                        <Button variant="ghost" size="sm">View</Button>
+                      <td className="p-2 border-b text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="flex items-center gap-1">
+                              Actions
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedTenantId(tenant.id);
+                              setDialogMode('view');
+                              setDialogOpen(true);
+                            }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                              View Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedTenantId(tenant.id);
+                              setDialogMode('edit');
+                              setDialogOpen(true);
+                            }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                              Edit Tenant
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-red-600 focus:text-red-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                              Delete Tenant
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -395,6 +445,60 @@ export default function TenantsPage() {
           </div>
         </Card>
       </div>
+
+      {/* Tenant Dialog */}
+      {dialogOpen && (
+        <TenantDialog
+          isOpen={dialogOpen}
+          onClose={() => {
+            setDialogOpen(false);
+            setSelectedTenantId(null);
+          }}
+          tenantId={selectedTenantId || undefined}
+          mode={dialogMode}
+          onTenantUpdated={() => {
+            // Refresh the tenants list after a tenant is updated
+            const fetchTenants = async () => {
+              try {
+                setLoading(true);
+                const { supabase } = await import('@/lib/supabase/client');
+                
+                let { data, error } = await supabase
+                  .from('users')
+                  .select(`
+                    *,
+                    leases(*, unit:units(*, property:properties(id, name, address)))
+                  `)
+                  .or('role.eq.tenant,user_type.eq.tenant');
+                
+                if (error) {
+                  console.warn('Fetch failed, trying alternate approach:', error);
+                  const { data: allUsers, error: allUsersError } = await supabase
+                    .from('users')
+                    .select('*');
+                    
+                  if (allUsersError) throw allUsersError;
+                  
+                  data = allUsers.filter(user => 
+                    user.user_type === 'tenant' || user.role === 'tenant'
+                  );
+                }
+                
+                if (data && data.length > 0) {
+                  setTenants(data);
+                  setFilteredTenants(data);
+                }
+              } catch (error) {
+                console.error('Error fetching tenants:', error);
+              } finally {
+                setLoading(false);
+              }
+            };
+            
+            fetchTenants();
+          }}
+        />
+      )}
     </MainLayout>
   );
 }

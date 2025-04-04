@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useAuth, useUser } from "@clerk/nextjs";
 
 export default function AuthLayout({
   children,
@@ -10,24 +10,22 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { isSignedIn, isLoaded } = useUser();
+  const { userRole } = useAuth();
 
   useEffect(() => {
-    // Check auth state on mount
-    const { data: { session } } = supabase.auth.getSession();
-    if (session) {
-      router.push("/properties");
-    }
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.push("/properties");
+    // Only redirect after Clerk has loaded
+    if (!isLoaded) return;
+    
+    // If user is already signed in, redirect based on their role
+    if (isSignedIn) {
+      if (userRole === 'admin') {
+        router.push("/admin/dashboard");
+      } else {
+        // Default to tenant dashboard if role isn't admin
+        router.push("/tenant/dashboard");
       }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
+    }
+  }, [isSignedIn, isLoaded, userRole, router]);
 
   return <>{children}</>;

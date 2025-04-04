@@ -20,12 +20,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get role from request body
+    // Get user_type from request body
     const { role } = await request.json();
     
-    if (!role || !['tenant', 'landlord', 'admin'].includes(role)) {
+    // Map 'landlord' to 'admin' for backward compatibility
+    const userType = role === 'landlord' ? 'admin' : role;
+    
+    if (!userType || !['tenant', 'admin'].includes(userType)) {
       return NextResponse.json(
-        { error: 'Invalid role' },
+        { error: 'Invalid user type' },
         { status: 400 }
       );
     }
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .eq('clerk_id', userId)
+      .eq('id', userId)
       .single();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
@@ -48,14 +51,14 @@ export async function POST(request: NextRequest) {
     let userData;
 
     if (existingUser) {
-      // Update existing user's role
+      // Update existing user's user_type
       const { data, error: updateError } = await supabase
         .from('users')
         .update({ 
-          role,
+          user_type: userType,
           updated_at: new Date().toISOString()
         })
-        .eq('clerk_id', userId)
+        .eq('id', userId)
         .select()
         .single();
 
@@ -68,14 +71,16 @@ export async function POST(request: NextRequest) {
 
       userData = data;
     } else {
-      // Create new user with selected role
+      // Create new user with selected user_type
       const { data, error: insertError } = await supabase
         .from('users')
         .insert({
-          clerk_id: userId,
-          role,
+          id: userId,
+          user_type: userType,
+          full_name: 'New User', // This will be updated later via webhook
+          email: 'pending@example.com', // This will be updated later via webhook
           created_at: new Date().toISOString(),
-          is_active: true
+          updated_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: userData.id,
-        role: userData.role
+        user_type: userData.user_type
       }
     });
   } catch (error: any) {

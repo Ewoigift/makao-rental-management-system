@@ -46,99 +46,94 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      // Check for existing role in localStorage first
-      const storedRole = localStorage.getItem("userRole");
-      
-      if (storedRole) {
-        setUserRole(storedRole);
-        setIsLoading(false);
-        // Skip database sync if we already have the role
-        return;
-      }
+      console.log('Syncing user with Supabase:', user.id);
       
       // Skip Supabase sync if we're in development and don't have a valid role key
-      // Use a temporary role for development
       if (process.env.NODE_ENV === 'development' && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         console.warn('Development mode: Using default role');
-        const defaultRole = 'landlord'; // Default role for development
+        const defaultRole = 'tenant'; // Default role for development
         setUserRole(defaultRole);
         localStorage.setItem("userRole", defaultRole);
-        handleRoleBasedRedirect(defaultRole);
         setIsLoading(false);
         return;
       }
       
-      try {
-        // Sync user data with Supabase
-        await syncUserWithSupabase(user);
+      // Always sync with Supabase first to ensure user exists in database
+      const syncedUser = await syncUserWithSupabase(user);
+      console.log('User sync result:', syncedUser ? 'Success' : 'Failed');
+      
+      if (syncedUser) {
+        // User was synced successfully - use their role from Supabase
+        const role = syncedUser.role;
         
-        // Get user role from Supabase
+        if (role) {
+          console.log('User role found in Supabase:', role);
+          setUserRole(role);
+          localStorage.setItem("userRole", role);
+        } else {
+          // Default to tenant if no role found
+          console.warn('No role found - defaulting to tenant');
+          setUserRole('tenant');
+          localStorage.setItem("userRole", 'tenant');
+        }
+      } else {
+        // If sync failed, try to get role directly
+        console.log('Trying to get role for user ID:', user.id);
         const role = await getUserRole(user.id);
         
         if (role) {
+          console.log('User role found via direct query:', role);
           setUserRole(role);
           localStorage.setItem("userRole", role);
-          handleRoleBasedRedirect(role);
-        }
-      } catch (supabaseError) {
-        console.error("Supabase connection error:", supabaseError);
-        
-        // Fallback for development - set a default role
-        if (process.env.NODE_ENV === 'development') {
-          const defaultRole = 'landlord'; // Default role for development
-          setUserRole(defaultRole);
-          localStorage.setItem("userRole", defaultRole);
-          handleRoleBasedRedirect(defaultRole);
         } else {
-          throw supabaseError; // Re-throw in production
+          // Last resort default
+          console.warn('No role found anywhere - defaulting to tenant');
+          setUserRole('tenant');
+          localStorage.setItem("userRole", 'tenant');
         }
       }
     } catch (error) {
-      console.error("Error syncing user with Supabase:", error);
-      setError("Failed to sync user data. Please try again.");
-      router.push("/error");
+      console.error("Error syncing user:", error);
+      // Default to tenant role if there's an error
+      setUserRole('tenant');
+      localStorage.setItem("userRole", 'tenant');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Helper function for role-based redirects
+  // Handle role-based redirects - only redirect after loading is complete
   const handleRoleBasedRedirect = (role: string) => {
-    if (role === "tenant") {
+    if (isLoading) return; // Skip redirects during loading
+    
+    if (role === "admin" || role === "landlord") {
+      router.push("/admin/dashboard");
+    } else if (role === "tenant") {
       router.push("/tenant/dashboard");
-    } else if (role === "landlord") {
-      router.push("/dashboard");
+    } else {
+      // If no valid role, redirect to error page
+      router.push("/error");
     }
   };
 
   // Update user role
   const updateRole = async (role: string) => {
-    if (!isSignedIn || !user) return;
+    if (!isSignedIn || !user) {
+      console.error("Cannot update role: No authenticated user");
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Make API call to update role
-      const response = await fetch("/api/auth/update-role", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ role }),
-      });
 
-      if (!response.ok) {
-        throw new Error("Failed to update role");
-      }
-
+      // In a real app, you would update the role in your database
       setUserRole(role);
       localStorage.setItem("userRole", role);
       handleRoleBasedRedirect(role);
     } catch (error) {
       console.error("Error updating role:", error);
       setError("Failed to update role. Please try again.");
-      router.push("/error");
     } finally {
       setIsLoading(false);
     }
@@ -165,25 +160,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Only run on the client side
     if (typeof window === 'undefined') return;
-    
+
     if (isLoaded) {
       syncUser();
     }
-  }, [isLoaded, isSignedIn, user?.id]);
+  }, [isLoaded, isSignedIn, user]);
 
-  // Check localStorage for role on initial load (for client-side only)
+  // Handle redirects when user role changes
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedRole = localStorage.getItem("userRole");
-      if (storedRole && !userRole) {
-        setUserRole(storedRole);
-        setIsLoading(false);
-      }
+    if (userRole && !isLoading) {
+      handleRoleBasedRedirect(userRole);
     }
-  }, [userRole]);
+  }, [userRole, isLoading]);
 
+  // Provide auth context to children
   return (
-    <AuthContext.Provider value={{ isLoading, userRole, setUserRole, syncUser, updateRole, signOut }}>
+    <AuthContext.Provider
+      value={{
+        isLoading,
+        userRole,
+        setUserRole,
+        syncUser,
+        updateRole,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

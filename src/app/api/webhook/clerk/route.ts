@@ -59,13 +59,19 @@ export async function POST(req: Request) {
     const primaryPhone = phone_numbers?.find(phone => phone.id === evt.data.primary_phone_number_id);
     
     try {
-      // Create the user in Supabase
+      // Check if we have a preferred role stored in clerk metadata
+      const userMetadata = evt.data.private_metadata || {};
+      const preferredRole = userMetadata.role || 'tenant';
+      
+      // Create the user in Supabase with auto-generated UUID
+      // and store Clerk ID in clerk_id field
       await supabase.from('users').insert({
-        id: id,
+        clerk_id: id, // Store Clerk ID in clerk_id field instead of id
         email: primaryEmail?.email_address,
         full_name: `${first_name || ''} ${last_name || ''}`.trim(),
         phone_number: primaryPhone?.phone_number,
-        user_type: 'tenant', // Default role for new users
+        user_type: preferredRole, // Use selected role if available
+        role: preferredRole, // Use same value for text-based role field
       });
       
       return new Response('User created in Supabase', { status: 200 });
@@ -82,13 +88,25 @@ export async function POST(req: Request) {
     const primaryPhone = phone_numbers?.find(phone => phone.id === evt.data.primary_phone_number_id);
     
     try {
-      // Update the user in Supabase
+      // First, find the user by clerk_id
+      const { data: userData, error: findError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('clerk_id', id)
+        .single();
+      
+      if (findError || !userData) {
+        console.error('Error finding user by clerk_id:', findError);
+        return new Response('User not found', { status: 404 });
+      }
+      
+      // Update the user in Supabase by the database id
       await supabase.from('users').update({
         email: primaryEmail?.email_address,
         full_name: `${first_name || ''} ${last_name || ''}`.trim(),
         phone_number: primaryPhone?.phone_number,
         updated_at: new Date().toISOString(),
-      }).eq('id', id);
+      }).eq('id', userData.id);
       
       return new Response('User updated in Supabase', { status: 200 });
     } catch (error) {
@@ -101,16 +119,26 @@ export async function POST(req: Request) {
     const { id } = evt.data;
     
     try {
+      // First, find the user by clerk_id
+      const { data: userData, error: findError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('clerk_id', id)
+        .single();
+      
+      if (findError || !userData) {
+        console.error('Error finding user by clerk_id:', findError);
+        return new Response('User not found', { status: 404 });
+      }
+      
       // Handle user deletion in Supabase
-      // Note: You might want to archive users instead of deleting them
-      // or handle cascading deletions carefully
+      // Note: We're archiving users instead of deleting them
+      // to preserve referential integrity
       await supabase.from('users').update({
-        // Mark as deleted instead of actually deleting
-        // This preserves referential integrity
         email: `deleted_${id}@deleted.com`,
         phone_number: null,
         updated_at: new Date().toISOString(),
-      }).eq('id', id);
+      }).eq('id', userData.id);
       
       return new Response('User marked as deleted in Supabase', { status: 200 });
     } catch (error) {

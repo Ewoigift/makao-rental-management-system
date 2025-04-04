@@ -31,22 +31,33 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 
 // Types based on Supabase schema
+// Types based on Supabase schema
 interface Payment {
   id: string;
   lease_id: string;
+  tenant_id: string;
   amount: number;
   payment_date: string;
-  payment_method: string;
-  status: 'paid' | 'pending' | 'late' | 'failed';
+  payment_method: 'mpesa' | 'card' | 'bank_transfer' | 'cash';
   transaction_id?: string;
+  payment_proof_url?: string;
+  status: 'pending' | 'verified' | 'rejected';
+  rejection_reason?: string;
+  payment_category: 'rent' | 'deposit' | 'penalty' | 'other';
+  verified_by?: string;
+  verification_date?: string;
+  receipt_number?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
+  tenant?: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
   lease?: {
     id: string;
     unit_id: string;
-    tenant_id: string;
-    rent_amount: number;
     unit?: {
       id: string;
       unit_number: string;
@@ -54,11 +65,6 @@ interface Payment {
         id: string;
         name: string;
       };
-    };
-    tenant?: {
-      id: string;
-      full_name: string;
-      email: string;
     };
   };
 }
@@ -116,14 +122,12 @@ export default function PaymentsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'paid':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>;
+      case 'verified':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Verified</Badge>;
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
-      case 'late':
-        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Late</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Failed</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Rejected</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -150,7 +154,10 @@ export default function PaymentsPage() {
       <div className="container mx-auto py-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Payments</h1>
-          <Button>
+          <Button onClick={() => {
+            // TODO: Implement payment recording functionality
+            alert('Payment recording feature coming soon!');
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Record Payment
           </Button>
@@ -185,21 +192,17 @@ export default function PaymentsPage() {
                       <Check className={`mr-2 h-4 w-4 ${!statusFilter ? "opacity-100" : "opacity-0"}`} />
                       All
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter("paid")}>
-                      <Check className={`mr-2 h-4 w-4 ${statusFilter === "paid" ? "opacity-100" : "opacity-0"}`} />
-                      Paid
+                    <DropdownMenuItem onClick={() => setStatusFilter("verified")}>
+                      <Check className={`mr-2 h-4 w-4 ${statusFilter === "verified" ? "opacity-100" : "opacity-0"}`} />
+                      Verified
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setStatusFilter("pending")}>
                       <Check className={`mr-2 h-4 w-4 ${statusFilter === "pending" ? "opacity-100" : "opacity-0"}`} />
                       Pending
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter("late")}>
-                      <Check className={`mr-2 h-4 w-4 ${statusFilter === "late" ? "opacity-100" : "opacity-0"}`} />
-                      Late
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter("failed")}>
-                      <Check className={`mr-2 h-4 w-4 ${statusFilter === "failed" ? "opacity-100" : "opacity-0"}`} />
-                      Failed
+                    <DropdownMenuItem onClick={() => setStatusFilter("rejected")}>
+                      <Check className={`mr-2 h-4 w-4 ${statusFilter === "rejected" ? "opacity-100" : "opacity-0"}`} />
+                      Rejected
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>

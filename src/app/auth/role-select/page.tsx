@@ -38,6 +38,15 @@ export default function RoleSelectPage() {
     setError("");
 
     try {
+      // First, update the user's metadata in Clerk
+      // This is important for the webhook to pick up the correct role
+      await user.update({
+        privateMetadata: {
+          ...user.privateMetadata,
+          role: role
+        }
+      });
+      
       // Check if user already exists in Supabase
       const { data: existingUser, error: fetchError } = await supabase
         .from("users")
@@ -55,7 +64,11 @@ export default function RoleSelectPage() {
         if (existingUser.role !== role) {
           const { error: updateError } = await supabase
             .from("users")
-            .update({ role })
+            .update({ 
+              role,
+              user_type: role, // Update both fields to ensure consistency
+              updated_at: new Date().toISOString()
+            })
             .eq("clerk_id", user.id);
 
           if (updateError) throw updateError;
@@ -65,10 +78,10 @@ export default function RoleSelectPage() {
         const { error: insertError } = await supabase.from("users").insert({
           clerk_id: user.id,
           email: user.primaryEmailAddress?.emailAddress,
-          first_name: user.firstName,
-          last_name: user.lastName,
+          full_name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          phone_number: user.primaryPhoneNumber?.phoneNumber,
           role,
-          phone: user.primaryPhoneNumber?.phoneNumber,
+          user_type: role, // Set both role fields consistently
           created_at: new Date().toISOString(),
         });
 

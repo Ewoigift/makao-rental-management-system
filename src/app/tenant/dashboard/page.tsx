@@ -7,10 +7,21 @@ import { Home, Receipt, Wrench, Bell, Calendar, FileText, CreditCard } from 'luc
 import Link from 'next/link';
 import Image from 'next/image';
 
+// Define TenantInfo interface for type safety
+interface TenantInfo {
+  name: string;
+  unit: string;
+  property: string;
+  leaseEnd: string;
+  rentAmount: string;
+  nextPaymentDue: string;
+  balance: string;
+  isAllocated: boolean;
+}
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
-// Using the landlord dashboard function for now since getTenantDashboardSummary is not implemented yet
-import { getLandlordDashboardSummary } from '@/lib/db/api-utils';
+import { getTenantDashboardSummary } from '@/lib/db/api-utils';
 
 export default function TenantDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -18,51 +29,27 @@ export default function TenantDashboardPage() {
   const { user } = useUser();
 
   useEffect(() => {
-    // In a real app, this would fetch from the database using the current user's ID
-    // For now, simulate API call with mock data
-    setTimeout(() => {
-      setDashboardData({
-        tenant: {
-          full_name: user?.fullName || 'John Doe',
-          email: user?.primaryEmailAddress?.emailAddress || 'john.doe@example.com',
-          phone: '+254712345678'
-        },
-        lease: {
-          id: 'lease-123',
-          start_date: '2025-01-01',
-          end_date: '2025-12-31',
-          rent_amount: '25000'
-        },
-        unit: {
-          unit_number: 'A101',
-          properties: {
-            name: 'Sunset Apartments'
-          }
-        },
-        currentBalance: 0,
-        nextPaymentDue: '2025-05-01'
-      });
-      setLoading(false);
-    }, 800);
-
-    // In production, uncomment this to fetch from the actual database:
-    // async function fetchDashboardData() {
-    //   try {
-    //     // You would get the actual tenant ID from auth context
-    //     const tenantId = 'actual-tenant-id'; 
-    //     const data = await getTenantDashboardSummary(tenantId);
-    //     setDashboardData(data);
-    //   } catch (error) {
-    //     console.error('Error fetching tenant dashboard data:', error);
-    //   } finally {
-    //     setLoading(false);
-    //   }
-    // }
-    // fetchDashboardData();
+    // Fetch real data from the database using the current user's ID
+    async function fetchDashboardData() {
+      try {
+        if (!user?.id) return;
+        
+        const data = await getTenantDashboardSummary(user.id);
+        setDashboardData(data);
+      } catch (error) {
+        console.error('Error fetching tenant dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    if (user) {
+      fetchDashboardData();
+    }
   }, [user]);
 
   // Derived data from dashboard
-  const tenantInfo = dashboardData ? {
+  const tenantInfo: TenantInfo = dashboardData ? {
     name: dashboardData.tenant?.full_name || 'Tenant',
     unit: dashboardData.unit?.unit_number || '-',
     property: dashboardData.unit?.properties?.name || '-',
@@ -70,6 +57,7 @@ export default function TenantDashboardPage() {
     rentAmount: `KES ${parseInt(dashboardData.lease?.rent_amount || '0').toLocaleString()}`,
     nextPaymentDue: dashboardData.nextPaymentDue || '-',
     balance: `KES ${dashboardData.currentBalance?.toLocaleString() || '0'}`,
+    isAllocated: !dashboardData.notAllocated
   } : {
     name: 'Loading...',
     unit: '-',
@@ -78,6 +66,7 @@ export default function TenantDashboardPage() {
     rentAmount: '-',
     nextPaymentDue: '-',
     balance: '-',
+    isAllocated: false
   };
 
   // Recent notifications
@@ -124,17 +113,25 @@ export default function TenantDashboardPage() {
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <div>
                 <h1 className="text-3xl font-bold">Welcome, {tenantInfo.name}</h1>
-                <p className="text-gray-500">
-                  {tenantInfo.property} • Unit {tenantInfo.unit}
-                </p>
+                {tenantInfo.isAllocated ? (
+                  <p className="text-gray-500">
+                    {tenantInfo.property} • Unit {tenantInfo.unit}
+                  </p>
+                ) : (
+                  <p className="text-amber-600 font-medium">
+                    You have not been allocated to a property unit yet
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
-                <Button asChild>
-                  <Link href="/tenant/payments/make">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Make Payment
-                  </Link>
-                </Button>
+                {tenantInfo.isAllocated && (
+                  <Button asChild>
+                    <Link href="/tenant/payments/make">
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      Make Payment
+                    </Link>
+                  </Button>
+                )}
                 <Button variant="outline" asChild>
                   <Link href="/tenant/maintenance/new">
                     <Wrench className="mr-2 h-4 w-4" />
@@ -145,43 +142,62 @@ export default function TenantDashboardPage() {
             </div>
 
             {/* Payment Summary Card */}
-            <Card className="overflow-hidden border-t-4 border-t-green-500">
-              <CardHeader className="bg-green-50 pb-2">
-                <CardTitle className="flex items-center text-green-700">
-                  <Receipt className="mr-2 h-5 w-5" />
-                  Payment Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Monthly Rent</p>
-                    <p className="text-xl font-bold">{tenantInfo.rentAmount}</p>
+            {tenantInfo.isAllocated ? (
+              <Card className="overflow-hidden border-t-4 border-t-green-500">
+                <CardHeader className="bg-green-50 pb-2">
+                  <CardTitle className="flex items-center text-green-700">
+                    <Receipt className="mr-2 h-5 w-5" />
+                    Payment Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Monthly Rent</p>
+                      <p className="text-xl font-bold">{tenantInfo.rentAmount}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Next Payment Due</p>
+                      <p className="text-xl font-bold">{tenantInfo.nextPaymentDue}</p>
+                      {tenantInfo.nextPaymentDue !== '-' && (
+                        <p className="text-xs text-gray-500">
+                          {new Date(tenantInfo.nextPaymentDue) < new Date() 
+                            ? 'Overdue' 
+                            : `${Math.ceil((new Date(tenantInfo.nextPaymentDue).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Current Balance</p>
+                      <p className="text-xl font-bold">{tenantInfo.balance}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Next Payment Due</p>
-                    <p className="text-xl font-bold">{tenantInfo.nextPaymentDue}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(tenantInfo.nextPaymentDue) < new Date() 
-                        ? 'Overdue' 
-                        : `${Math.ceil((new Date(tenantInfo.nextPaymentDue).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`}
-                    </p>
+                </CardContent>
+                <CardFooter className="bg-gray-50 flex justify-between">
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/tenant/payments/history">Payment History</Link>
+                  </Button>
+                  <Button size="sm" asChild>
+                    <Link href="/tenant/payments/make">Pay Now</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : (
+              <Card className="overflow-hidden border-t-4 border-t-amber-500">
+                <CardHeader className="bg-amber-50 pb-2">
+                  <CardTitle className="flex items-center text-amber-700">
+                    <Home className="mr-2 h-5 w-5" />
+                    Allocation Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="text-center py-6">
+                    <p className="text-amber-600 font-medium mb-2">You have not been allocated to a property unit yet</p>
+                    <p className="text-gray-500">Once your landlord assigns you to a unit, you will be able to see your lease details and payment information here.</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Current Balance</p>
-                    <p className="text-xl font-bold">{tenantInfo.balance}</p>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="bg-gray-50 flex justify-between">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/tenant/payments/history">Payment History</Link>
-                </Button>
-                <Button size="sm" asChild>
-                  <Link href="/tenant/payments/make">Pay Now</Link>
-                </Button>
-              </CardFooter>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Actions */}
             <h2 className="text-xl font-semibold mt-8">Quick Actions</h2>

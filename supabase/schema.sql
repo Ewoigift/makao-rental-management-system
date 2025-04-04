@@ -20,7 +20,7 @@ CREATE TYPE renovation_status AS ENUM ('planned', 'in_progress', 'completed', 'd
 
 -- Users Table (extended from auth.users)
 CREATE TABLE users (
-  id UUID REFERENCES auth.users PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email TEXT UNIQUE,
   full_name TEXT,
   phone_number TEXT,
@@ -28,7 +28,9 @@ CREATE TABLE users (
   profile_picture_url TEXT,
   id_number TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  clerk_id TEXT UNIQUE, -- Store Clerk user ID separately
+  role TEXT DEFAULT 'tenant' -- Text-based role field for compatibility
 );
 
 -- Properties Table
@@ -207,34 +209,34 @@ CREATE TABLE renovations (
 -- Users table policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
+-- 1. Policy for users to view their own profile
 CREATE POLICY "Users can view their own profile" 
 ON users FOR SELECT 
-USING (auth.uid() = id);
+USING (auth.uid()::text = id::text);
 
+-- 2. Admin policy using a non-recursive approach
+-- This policy allows selecting any row if the current user has the 'admin' role
+-- We're using a direct auth.jwt() check instead of querying the users table
 CREATE POLICY "Admins can view all user profiles" 
 ON users FOR SELECT 
-USING (
-  EXISTS (
-    SELECT 1 FROM users
-    WHERE users.id = auth.uid() 
-    AND users.user_type = 'admin'
-  )
-);
+USING (auth.jwt() ? 'role' AND auth.jwt()->>'role' = 'admin');
 
+-- 3. Policy for users to update their own profile
 CREATE POLICY "Users can update their own profile" 
 ON users FOR UPDATE
-USING (auth.uid() = id)
-WITH CHECK (auth.uid() = id);
+USING (auth.uid()::text = id::text)
+WITH CHECK (auth.uid()::text = id::text);
 
+-- 4. Admin policy for updating user profiles
 CREATE POLICY "Admins can update any user profile" 
 ON users FOR UPDATE
-USING (
-  EXISTS (
-    SELECT 1 FROM users
-    WHERE users.id = auth.uid() 
-    AND users.user_type = 'admin'
-  )
-);
+USING (auth.jwt() ? 'role' AND auth.jwt()->>'role' = 'admin')
+WITH CHECK (true);
+
+-- 5. Allow system-level inserts for webhook handlers
+CREATE POLICY "Allow service role inserts" 
+ON users FOR INSERT 
+WITH CHECK (true);
 
 -- Properties table policies
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;

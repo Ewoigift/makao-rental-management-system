@@ -67,7 +67,14 @@ export default function CustomSignUp() {
                     card: "shadow-none",
                   }
                 }}
-                redirectUrl="/auth/role-select"
+                redirectUrl="/tenant/dashboard"
+                signUpUrl="/sign-up?role=tenant"
+                signInUrl="/sign-in?role=tenant"
+                afterSignUpUrl="/dashboard"
+                initialValues={{
+                  emailAddress: "",
+                  privateMetadata: { role: "tenant" }
+                }}
               />
             </div>
           </TabsContent>
@@ -86,7 +93,14 @@ export default function CustomSignUp() {
                     card: "shadow-none",
                   }
                 }}
-                redirectUrl="/auth/role-select"
+                redirectUrl="/dashboard"
+                signUpUrl="/sign-up?role=landlord"
+                signInUrl="/sign-in?role=landlord"
+                afterSignUpUrl="/dashboard"
+                initialValues={{
+                  emailAddress: "",
+                  privateMetadata: { role: "landlord" }
+                }}
               />
             </div>
           </TabsContent>

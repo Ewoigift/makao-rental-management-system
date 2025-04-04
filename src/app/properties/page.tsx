@@ -21,7 +21,7 @@ import PropertyModal from "@/components/properties/property-modal";
 import { propertiesService } from "@/services/properties";
 import { supabase } from "@/lib/supabase/client";
 import type { Property, Unit } from "@/types/supabase";
-import { formatCurrency, calculatePropertyRevenue } from "@/lib/utils";
+import { formatKSh } from "@/lib/utils/currency";
 import ProtectedLayout from "@/components/layout/protected-layout";
 import { Input } from "@/components/ui/input";
 import {
@@ -56,6 +56,23 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { formatPercentage } from "@/lib/utils/index";
+
+interface Property {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  county: string;
+  property_type: string;
+  total_units: number;
+  owner_id?: string;
+  manager_id?: string;
+  description?: string;
+  amenities?: any;
+  created_at: string;
+  updated_at: string;
+}
 
 interface PropertyWithUnits extends Property {
   units?: Unit[];
@@ -86,7 +103,9 @@ export default function PropertiesPage() {
   const filteredProperties = properties.filter(
     (property) =>
       property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.county.toLowerCase().includes(searchTerm.toLowerCase()) ||
       property.property_type.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
@@ -157,14 +176,15 @@ export default function PropertiesPage() {
           .from('properties')
           .update({
             name: propertyData.name,
-            location: propertyData.location,
+            address: propertyData.address,
+            city: propertyData.city,
+            county: propertyData.county,
             description: propertyData.description,
             property_type: propertyData.property_type,
-            status: propertyData.status,
             total_units: propertyData.total_units,
-            year_built: propertyData.year_built || null,
-            purchase_price: propertyData.purchase_price || null,
-            monthly_expenses: propertyData.monthly_expenses || null,
+            owner_id: propertyData.owner_id || null,
+            manager_id: propertyData.manager_id || null,
+            amenities: propertyData.amenities || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', propertyData.id);
@@ -177,14 +197,15 @@ export default function PropertiesPage() {
           .from('properties')
           .insert({
             name: propertyData.name,
-            location: propertyData.location,
+            address: propertyData.address,
+            city: propertyData.city,
+            county: propertyData.county,
             description: propertyData.description,
             property_type: propertyData.property_type,
-            status: propertyData.status,
             total_units: propertyData.total_units,
-            year_built: propertyData.year_built || null,
-            purchase_price: propertyData.purchase_price || null,
-            monthly_expenses: propertyData.monthly_expenses || null,
+            owner_id: propertyData.owner_id || null,
+            manager_id: propertyData.manager_id || null,
+            amenities: propertyData.amenities || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
@@ -406,50 +427,54 @@ export default function PropertiesPage() {
                   </div>
                 ) : (
                   <div className="rounded-md border overflow-hidden">
-                    <Table>
+                    <Table className="min-w-full">
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12 text-center">#</TableHead>
                           <TableHead>Name</TableHead>
-                          <TableHead>Location</TableHead>
                           <TableHead>Type</TableHead>
-                          <TableHead className="text-center">Units</TableHead>
-                          <TableHead className="text-center">Occupancy</TableHead>
-                          <TableHead className="text-center">Revenue</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Units</TableHead>
+                          <TableHead>Occupancy</TableHead>
+                          <TableHead>Revenue</TableHead>
+                          <TableHead className="text-right w-24">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {paginatedProperties.map((property) => (
+                        {paginatedProperties.map((property, index) => (
                           <TableRow key={property.id}>
-                            <TableCell className="font-medium">{property.name}</TableCell>
-                            <TableCell className="max-w-xs truncate">{property.location}</TableCell>
+                            <TableCell className="text-center font-medium">
+                              {(currentPage - 1) * itemsPerPage + index + 1}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex flex-col">
+                                <span>{property.name}</span>
+                                <span className="text-xs text-muted-foreground truncate max-w-64">{property.address}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{property.property_type}</TableCell>
+                            <TableCell>{property.city}</TableCell>
                             <TableCell>
-                              {property.property_type.charAt(0).toUpperCase() + property.property_type.slice(1)}
+                              <div className="flex flex-col">
+                                <span className="font-medium">{property.total_units}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {property.occupied_units || 0} occupied, {property.vacant_units || 0} vacant
+                                </span>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-center">
-                              {property.occupied_units}/{property.total_units}
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${property.occupancy_rate && property.occupancy_rate > 75 ? 'bg-green-500' : property.occupancy_rate && property.occupancy_rate > 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                    style={{ width: `${property.occupancy_rate || 0}%` }}
+                                  />
+                                </div>
+                                <span>{formatPercentage(property.occupancy_rate || 0)}</span>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-center">
-                              <span 
-                                className={`px-2 py-1 rounded-full text-xs ${property.occupancy_rate >= 80 ? 'bg-green-100 text-green-800' : 
-                                property.occupancy_rate >= 50 ? 'bg-yellow-100 text-yellow-800' : 
-                                'bg-red-100 text-red-800'}`}
-                              >
-                                {property.occupancy_rate}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {formatCurrency(property.total_revenue || 0)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span 
-                                className={`px-2 py-1 rounded-full text-xs ${property.status === 'active' ? 'bg-green-100 text-green-800' : 
-                                property.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' : 
-                                'bg-gray-100 text-gray-800'}`}
-                              >
-                                {property.status.charAt(0).toUpperCase() + property.status.slice(1)}
-                              </span>
+                            <TableCell>
+                              {formatKSh(property.total_revenue || 0)}
                             </TableCell>
                             <TableCell className="text-right">
                               <DropdownMenu>

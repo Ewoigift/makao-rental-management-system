@@ -1,50 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { supabase } from "@/lib/supabase";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SignUp } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
+import { Loader2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const { isSignedIn, isLoaded } = useUser();
 
   useEffect(() => {
-    // Check if user is already logged in
-    const { data: { session } } = supabase.auth.getSession();
-    if (session) {
-      router.push("/properties");
+    // If already signed in, redirect
+    if (isLoaded && isSignedIn) {
+      router.push("/dashboard");
     }
-  }, [router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      router.push("/auth/login");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to register");
-    }
-  };
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto flex items-center justify-center min-h-screen">
@@ -53,73 +33,25 @@ export default function RegisterPage() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
             Create an account
           </h2>
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            Sign up to manage your properties or tenant account
+          </p>
+        </div>
+
+        <div className="mt-8">
+          <SignUp redirectUrl="/dashboard" signInUrl="/sign-in" />
         </div>
         
-        {error && (
-          <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <Label htmlFor="email">Email address</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Button
-              type="submit"
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-            >
-              Create Account
-            </Button>
-          </div>
-        </form>
-
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
-            <a
-              href="/auth/login"
-              className="font-medium text-primary hover:text-primary/90"
+            <Button 
+              variant="link" 
+              className="p-0" 
+              onClick={() => router.push("/sign-in")}
             >
               Sign in
-            </a>
+            </Button>
           </p>
         </div>
       </div>
