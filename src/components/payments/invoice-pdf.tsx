@@ -1,8 +1,10 @@
 "use client";
 
-import { Document, Page, Text, View, StyleSheet, Font, PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, PDFViewer } from '@react-pdf/renderer';
 import { Button } from '../ui/button';
-import { FileDown, Printer } from 'lucide-react';
+import { FileDown, Eye } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { pdf } from '@react-pdf/renderer';
 
 // Define type for payment data
 export interface InvoiceData {
@@ -178,7 +180,7 @@ const InvoicePDF = ({ invoiceData }: { invoiceData: InvoiceData }) => (
             invoiceData.status === 'paid' ? styles.statusPaid : 
             invoiceData.status === 'pending' ? styles.statusPending : styles.statusOverdue
           ]}>
-            {invoiceData.status}
+            {invoiceData.status.toUpperCase()}
           </Text>
           <Text style={styles.label}>INVOICE NUMBER</Text>
           <Text style={styles.value}>{invoiceData.invoiceNumber}</Text>
@@ -197,27 +199,27 @@ const InvoicePDF = ({ invoiceData }: { invoiceData: InvoiceData }) => (
 
       <View style={styles.infoContainer}>
         <View style={styles.infoColumn}>
-          <Text style={styles.sectionTitle}>Billed To:</Text>
+          <Text style={styles.sectionTitle}>BILLED TO:</Text>
           <Text style={styles.value}>{invoiceData.tenantName}</Text>
           {invoiceData.tenantEmail && <Text style={styles.value}>{invoiceData.tenantEmail}</Text>}
           <Text style={styles.value}>{invoiceData.unitNumber}, {invoiceData.propertyName}</Text>
         </View>
         <View style={styles.infoColumn}>
-          <Text style={styles.sectionTitle}>From:</Text>
+          <Text style={styles.sectionTitle}>FROM:</Text>
           <Text style={styles.value}>{invoiceData.landlordName}</Text>
           {invoiceData.landlordEmail && <Text style={styles.value}>{invoiceData.landlordEmail}</Text>}
-          <Text style={styles.value}>Makao Rental Management</Text>
+          <Text style={styles.value}>MAKAO RENTAL MANAGEMENT</Text>
         </View>
       </View>
 
       <View style={styles.divider} />
 
       <View>
-        <Text style={styles.sectionTitle}>Payment Details</Text>
+        <Text style={styles.sectionTitle}>PAYMENT DETAILS</Text>
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Description</Text>
-          <Text style={styles.summaryLabel}>Amount</Text>
+          <Text style={styles.summaryLabel}>DESCRIPTION</Text>
+          <Text style={styles.summaryLabel}>AMOUNT</Text>
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryValue}>{invoiceData.description}</Text>
@@ -234,13 +236,13 @@ const InvoicePDF = ({ invoiceData }: { invoiceData: InvoiceData }) => (
 
       {invoiceData.paymentMethod && (
         <View style={{marginTop: 30}}>
-          <Text style={styles.sectionTitle}>Payment Information</Text>
-          <Text style={styles.value}>Method: {invoiceData.paymentMethod}</Text>
+          <Text style={styles.sectionTitle}>PAYMENT INFORMATION</Text>
+          <Text style={styles.value}>METHOD: {invoiceData.paymentMethod.toUpperCase()}</Text>
         </View>
       )}
 
       <Text style={styles.footer}>
-        This is a computer-generated document and requires no signature. For any queries regarding this invoice, please contact support@makao.com
+        THIS IS A COMPUTER-GENERATED DOCUMENT AND REQUIRES NO SIGNATURE. FOR ANY QUERIES REGARDING THIS INVOICE, PLEASE CONTACT SUPPORT@MAKAO.COM
       </Text>
     </Page>
   </Document>
@@ -248,23 +250,38 @@ const InvoicePDF = ({ invoiceData }: { invoiceData: InvoiceData }) => (
 
 // PDF Download Button Component
 export function InvoiceDownloadButton({ invoiceData }: { invoiceData: InvoiceData }) {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const generatePdf = useCallback(async () => {
+    setIsGenerating(true);
+    try {
+      const blob = await pdf(<InvoicePDF invoiceData={invoiceData} />).toBlob();
+      
+      // Create a download link and trigger it
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `invoice-${invoiceData.invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [invoiceData]);
+
   return (
-    <PDFDownloadLink 
-      document={<InvoicePDF invoiceData={invoiceData} />} 
-      fileName={`invoice-${invoiceData.invoiceNumber}.pdf`}
-      className="inline-block"
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={generatePdf}
+      disabled={isGenerating}
     >
-      {({ blob, url, loading, error }) => 
-        <Button 
-          variant="outline" 
-          size="sm"
-          disabled={loading}
-        >
-          <FileDown className="h-4 w-4 mr-2" />
-          {loading ? 'Generating PDF...' : 'Download Invoice'}
-        </Button>
-      }
-    </PDFDownloadLink>
+      <FileDown className="h-4 w-4 mr-2" />
+      {isGenerating ? 'Generating PDF...' : 'Download Invoice'}
+    </Button>
   );
 }
 
@@ -276,3 +293,21 @@ export function InvoiceViewer({ invoiceData }: { invoiceData: InvoiceData }) {
     </PDFViewer>
   );
 }
+
+// Preview Button that returns a component to view the PDF
+export function InvoicePreviewButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={onClick}
+      className="ml-2"
+    >
+      <Eye className="h-4 w-4 mr-2" />
+      Preview Invoice
+    </Button>
+  );
+}
+
+// Export InvoicePDF for use in other components
+export { InvoicePDF };
