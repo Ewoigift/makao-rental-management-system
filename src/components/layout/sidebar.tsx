@@ -30,11 +30,13 @@ export function Sidebar() {
   useEffect(() => {
     // First try to use the role from context
     if (userRole) {
+      console.log("Sidebar using role from context:", userRole);
       setRole(userRole);
     } else {
       // Fallback to localStorage
       const storedRole = localStorage.getItem("userRole");
       if (storedRole) {
+        console.log("Sidebar using role from localStorage:", storedRole);
         setRole(storedRole);
       }
     }
@@ -124,7 +126,8 @@ export function Sidebar() {
   ];
 
   // Select navigation based on role
-  const navItems = role === "tenant" ? tenantNavItems : landlordNavItems;
+  // Admin users should see the landlord sidebar
+  const navItems = (role === "tenant") ? tenantNavItems : landlordNavItems;
 
   return (
     <aside className="w-64 bg-background border-r border-border">
@@ -132,7 +135,7 @@ export function Sidebar() {
         <div className="mb-6">
           <h1 className="text-xl font-bold">Makao</h1>
           <p className="text-sm text-muted-foreground">
-            {role === "tenant" ? "Tenant Portal" : "Property Management System"}
+            {role === "tenant" ? "Tenant Portal" : (role === "admin" ? "Admin Portal" : "Property Management System")}
           </p>
         </div>
 
