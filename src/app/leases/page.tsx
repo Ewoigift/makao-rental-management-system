@@ -3,7 +3,7 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Plus, Search, Filter, Check, Mail, Phone, Home, Calendar } from "lucide-react";
+import { Users, Plus, Search, Filter, Check, Mail, Phone, Home, Calendar, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -16,6 +16,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { 
+  SubleaseAgreementData, 
+  SubleaseAgreementModal
+} from "@/components/lease/sublease-agreement";
 
 // Types based on Supabase schema
 interface Lease {
@@ -54,6 +66,9 @@ export default function LeasesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedLease, setSelectedLease] = useState<Lease | null>(null);
+  const [isLeaseModalOpen, setIsLeaseModalOpen] = useState(false);
+  const [isAgreementModalOpen, setIsAgreementModalOpen] = useState(false);
 
   // Fetch leases from Supabase
   useEffect(() => {
@@ -127,6 +142,55 @@ export default function LeasesPage() {
       style: 'currency',
       currency: 'USD',
     }).format(amount);
+  };
+
+  // Generate lease agreement data from lease
+  const generateLeaseAgreementData = (lease: Lease): SubleaseAgreementData => {
+    return {
+      originalTenantName: lease.tenant?.full_name || 'Tenant',
+      originalTenantEmail: lease.tenant?.email,
+      originalTenantPhone: lease.tenant?.phone_number,
+      subtenant: {
+        name: lease.tenant?.full_name || 'Tenant',
+        email: lease.tenant?.email,
+        phone: lease.tenant?.phone_number,
+      },
+      property: {
+        name: lease.unit?.property?.name || 'Property',
+        address: lease.unit?.property?.address || 'Address',
+        unitNumber: lease.unit?.unit_number || 'Unit',
+      },
+      subleaseTerms: {
+        startDate: lease.start_date,
+        endDate: lease.end_date,
+        monthlyRent: lease.rent_amount,
+        securityDeposit: lease.deposit_amount,
+      },
+      landlordApproval: true,
+      landlordName: "Property Management",
+      signingDate: lease.created_at || new Date().toISOString(),
+    };
+  };
+
+  // View lease details
+  const handleViewLease = (lease: Lease) => {
+    setSelectedLease(lease);
+    setIsLeaseModalOpen(true);
+  };
+
+  // Close lease modal
+  const handleCloseLeaseModal = () => {
+    setIsLeaseModalOpen(false);
+  };
+  
+  // Open agreement preview
+  const handleViewAgreement = () => {
+    setIsAgreementModalOpen(true);
+  };
+  
+  // Close agreement modal
+  const handleCloseAgreementModal = () => {
+    setIsAgreementModalOpen(false);
   };
 
   return (
@@ -257,7 +321,14 @@ export default function LeasesPage() {
                       <td className="p-4">{formatCurrency(lease.rent_amount)}</td>
                       <td className="p-4">{formatCurrency(lease.deposit_amount)}</td>
                       <td className="p-4">
-                        <Button variant="ghost" size="sm">View</Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleViewLease(lease)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -268,6 +339,83 @@ export default function LeasesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Lease Details Modal */}
+      {selectedLease && (
+        <Dialog open={isLeaseModalOpen} onOpenChange={setIsLeaseModalOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Lease Details</DialogTitle>
+              <DialogDescription>
+                Lease information for {selectedLease.tenant?.full_name} at {selectedLease.unit?.property?.name}, Unit {selectedLease.unit?.unit_number}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div>
+                <h3 className="font-medium mb-2">Tenant Information</h3>
+                <div className="text-sm space-y-1">
+                  <p><span className="font-medium">Name:</span> {selectedLease.tenant?.full_name}</p>
+                  <p><span className="font-medium">Email:</span> {selectedLease.tenant?.email}</p>
+                  <p><span className="font-medium">Phone:</span> {selectedLease.tenant?.phone_number}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium mb-2">Property Information</h3>
+                <div className="text-sm space-y-1">
+                  <p><span className="font-medium">Property:</span> {selectedLease.unit?.property?.name}</p>
+                  <p><span className="font-medium">Unit:</span> {selectedLease.unit?.unit_number}</p>
+                  <p><span className="font-medium">Address:</span> {selectedLease.unit?.property?.address}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium mb-2">Lease Terms</h3>
+                <div className="text-sm space-y-1">
+                  <p><span className="font-medium">Start Date:</span> {formatDate(selectedLease.start_date)}</p>
+                  <p><span className="font-medium">End Date:</span> {formatDate(selectedLease.end_date)}</p>
+                  <p><span className="font-medium">Status:</span> <span className="capitalize">{selectedLease.status}</span></p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium mb-2">Financial Information</h3>
+                <div className="text-sm space-y-1">
+                  <p><span className="font-medium">Monthly Rent:</span> {formatCurrency(selectedLease.rent_amount)}</p>
+                  <p><span className="font-medium">Security Deposit:</span> {formatCurrency(selectedLease.deposit_amount)}</p>
+                  <p><span className="font-medium">Created:</span> {formatDate(selectedLease.created_at)}</p>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleViewAgreement}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Agreement
+              </Button>
+              <Button
+                onClick={() => setIsLeaseModalOpen(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Lease Agreement Preview Modal */}
+      {selectedLease && (
+        <SubleaseAgreementModal
+          isOpen={isAgreementModalOpen}
+          onClose={handleCloseAgreementModal}
+          agreementData={generateLeaseAgreementData(selectedLease)}
+        />
+      )}
     </MainLayout>
   );
 }
