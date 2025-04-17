@@ -31,28 +31,38 @@ export default function DashboardRedirectPage() {
         
         if (!userData) {
           // If no user found, redirect to role selection
+          console.log('No user data found in Supabase, redirecting to role selection');
           setRedirectTarget('role-select');
           router.push('/auth/choose-role');
           return;
         }
         
-        // Redirect based on user type
-        const userType = userData.user_type || userData.role; // Use either field
+        // Log user data for debugging
+        console.log('User data from Supabase:', userData);
+        
+        // Redirect based on user type - prioritize user_type over role
+        // Make sure to handle case insensitivity
+        const userType = userData.user_type?.toLowerCase() || userData.role?.toLowerCase();
+        console.log('Determined user type:', userType);
         
         if (userType === 'tenant') {
+          console.log('Redirecting to tenant dashboard');
           setRedirectTarget('tenant');
           router.push('/tenant/dashboard');
         } else if (userType === 'admin' || userType === 'property_manager') {
+          console.log('Redirecting to admin dashboard');
           setRedirectTarget('admin');
           router.push('/admin/dashboard');
         } else {
           // If role is not recognized, redirect to role selection
+          console.log('Unrecognized user type, redirecting to role selection');
           setRedirectTarget('role-select');
           router.push('/auth/choose-role');
         }
       } catch (error) {
         console.error('Error checking user role:', error);
         // Default to role selection on error
+        console.log('Error occurred, redirecting to role selection');
         setRedirectTarget('role-select');
         router.push('/auth/choose-role');
       } finally {
