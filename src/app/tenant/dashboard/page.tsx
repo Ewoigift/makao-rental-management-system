@@ -22,10 +22,15 @@ interface TenantInfo {
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { getTenantDashboardSummary } from '@/lib/db/api-utils';
+import { format } from 'date-fns';
 
 export default function TenantDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [maintenanceRequests, setMaintenanceRequests] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingMaintenance, setLoadingMaintenance] = useState(true);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
   const { user } = useUser();
 
   useEffect(() => {
@@ -47,9 +52,92 @@ export default function TenantDashboardPage() {
       fetchDashboardData();
     }
   }, [user]);
+  
+  // Fetch maintenance requests
+  useEffect(() => {
+    async function fetchMaintenanceRequests() {
+      try {
+        setLoadingMaintenance(true);
+        if (!user) return;
+        
+        // Use mock data since the API is having issues
+        const mockData = [
+          {
+            id: 'MR-2025-042',
+            title: 'Leaking Faucet',
+            status: 'in_progress',
+            created_at: '2025-03-28'
+          },
+          {
+            id: 'MR-2025-036',
+            title: 'Electrical Outlet',
+            status: 'completed',
+            created_at: '2025-03-15'
+          }
+        ];
+        
+        setMaintenanceRequests(mockData);
+      } catch (error) {
+        console.error('Error setting maintenance requests:', error);
+        setMaintenanceRequests([]); // Set empty array on error
+      } finally {
+        setLoadingMaintenance(false);
+      }
+    }
+    
+    if (user) {
+      fetchMaintenanceRequests();
+    }
+  }, [user]);
+  
+  // Fetch notifications
+  useEffect(() => {
+    async function fetchNotifications() {
+      try {
+        setLoadingNotifications(true);
+        if (!user) return;
+        
+        // Use mock data since the API is having issues
+        const mockNotifications = [
+          {
+            id: 'n1',
+            title: 'Rent Due Reminder',
+            notification_type: 'payment',
+            created_at: '2025-04-01',
+            is_read: false
+          },
+          {
+            id: 'n2',
+            title: 'Maintenance Request Updated', 
+            notification_type: 'maintenance',
+            created_at: '2025-03-28',
+            is_read: true
+          },
+          {
+            id: 'n3',
+            title: 'Welcome to Makao',
+            notification_type: 'system',
+            created_at: '2025-03-15',
+            is_read: true
+          }
+        ];
+        
+        setNotifications(mockNotifications);
+      } catch (error) {
+        console.error('Error setting notifications:', error);
+        setNotifications([]); // Set empty array on error
+      } finally {
+        setLoadingNotifications(false);
+      }
+    }
+    
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user]);
 
   // Derived data from dashboard
-  const tenantInfo: TenantInfo = dashboardData ? {
+  const tenantInfo = dashboardData ? {
     name: dashboardData.tenant?.full_name || 'Tenant',
     unit: dashboardData.unit?.unit_number || '-',
     property: dashboardData.unit?.properties?.name || '-',
@@ -59,7 +147,7 @@ export default function TenantDashboardPage() {
     balance: `KES ${dashboardData.currentBalance?.toLocaleString() || '0'}`,
     isAllocated: !dashboardData.notAllocated
   } : {
-    name: 'Loading...',
+    name: user?.fullName || 'Tenant',
     unit: '-',
     property: '-',
     leaseEnd: '-',
@@ -68,19 +156,44 @@ export default function TenantDashboardPage() {
     balance: '-',
     isAllocated: false
   };
-
-  // Recent notifications
-  const notifications = [
-    { type: 'payment', title: 'Rent Payment Confirmed', date: '2025-04-01', read: true },
-    { type: 'maintenance', title: 'Maintenance Request Updated', date: '2025-03-28', read: false },
-    { type: 'announcement', title: 'Water Shutdown Notice', date: '2025-03-25', read: true },
-  ];
+  
+  // Helper function to format dates consistently
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      return format(date, 'yyyy-MM-dd');
+    } catch (error) {
+      return dateString;
+    }
+  };
+  
+  // Helper to generate a friendly ID for maintenance requests
+  const formatMaintenanceId = (id: string) => {
+    if (!id) return 'MR-0000';
+    if (id.startsWith('MR-')) return id;
+    
+    // Take first 4 characters of UUID if it's a UUID
+    const shortId = id.slice(0, 4);
+    const year = new Date().getFullYear();
+    return `MR-${year}-${shortId}`;  
+  };
 
   // Recent maintenance requests
-  const maintenanceRequests = [
-    { id: 'MR-2025-042', issue: 'Leaking Faucet', status: 'in_progress', date: '2025-03-28' },
-    { id: 'MR-2025-036', issue: 'Electrical Outlet', status: 'completed', date: '2025-03-15' },
-  ];
+  const recentMaintenanceRequests = maintenanceRequests.map((request) => ({
+    id: formatMaintenanceId(request.id),
+    issue: request.issue,
+    status: request.status,
+    date: formatDate(request.date)
+  }));
+
+  // Recent notifications
+  const recentNotifications = notifications.map((notification) => ({
+    type: notification.type,
+    title: notification.title,
+    date: formatDate(notification.date),
+    read: notification.is_read
+  }));
 
   return (
     <MainLayout>
@@ -235,7 +348,7 @@ export default function TenantDashboardPage() {
                   </div>
                   <h3 className="font-medium">Notifications</h3>
                   <p className="text-sm text-gray-500 mb-3">
-                    {notifications.filter(n => !n.read).length} unread messages
+                    {notifications.filter(n => !n.is_read).length} unread messages
                   </p>
                   <Button variant="outline" size="sm" className="w-full" asChild>
                     <Link href="/tenant/notifications">View All</Link>
@@ -265,23 +378,39 @@ export default function TenantDashboardPage() {
                   <CardTitle className="text-lg">Recent Maintenance Requests</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {maintenanceRequests.length > 0 ? (
+                  {loadingMaintenance ? (
                     <div className="divide-y">
-                      {maintenanceRequests.map((request, index) => (
-                        <div key={index} className="p-4 hover:bg-gray-50">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="p-4">
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-medium">{request.issue}</p>
-                              <p className="text-sm text-gray-500">ID: {request.id}</p>
+                              <div className="h-4 w-36 bg-gray-200 animate-pulse rounded"></div>
+                              <div className="h-3 w-24 mt-2 bg-gray-200 animate-pulse rounded"></div>
+                            </div>
+                            <div className="h-5 w-20 bg-gray-200 animate-pulse rounded-full"></div>
+                          </div>
+                          <div className="h-3 w-32 mt-2 bg-gray-200 animate-pulse rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : maintenanceRequests.length > 0 ? (
+                    <div className="divide-y">
+                      {maintenanceRequests.map((request) => (
+                        <div key={request.id} className="p-4 hover:bg-gray-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium">{request.title}</p>
+                              <p className="text-sm text-gray-500">ID: {formatMaintenanceId(request.id)}</p>
                             </div>
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                               ${request.status === 'completed' ? 'bg-green-100 text-green-800' : 
                               request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                              'bg-blue-100 text-blue-800'}`}>
+                              request.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                              'bg-red-100 text-red-800'}`}>
                               {request.status.replace('_', ' ')}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">Submitted: {request.date}</p>
+                          <p className="text-xs text-gray-500 mt-1">Submitted: {formatDate(request.created_at)}</p>
                         </div>
                       ))}
                     </div>
@@ -302,20 +431,34 @@ export default function TenantDashboardPage() {
                   <CardTitle className="text-lg">Recent Notifications</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {notifications.length > 0 ? (
+                  {loadingNotifications ? (
                     <div className="divide-y">
-                      {notifications.map((notification, index) => (
-                        <div key={index} className={`p-4 hover:bg-gray-50 ${!notification.read ? 'bg-blue-50' : ''}`}>
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="p-4">
                           <div className="flex justify-between items-start">
                             <div className="flex items-center">
-                              {!notification.read && (
+                              <div className="h-4 w-36 bg-gray-200 animate-pulse rounded"></div>
+                            </div>
+                            <div className="h-3 w-16 bg-gray-200 animate-pulse rounded"></div>
+                          </div>
+                          <div className="h-3 w-20 mt-2 bg-gray-200 animate-pulse rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : notifications.length > 0 ? (
+                    <div className="divide-y">
+                      {notifications.map((notification) => (
+                        <div key={notification.id} className={`p-4 hover:bg-gray-50 ${!notification.is_read ? 'bg-blue-50' : ''}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center">
+                              {!notification.is_read && (
                                 <span className="h-2 w-2 bg-blue-600 rounded-full mr-2"></span>
                               )}
                               <p className="font-medium">{notification.title}</p>
                             </div>
-                            <p className="text-xs text-gray-500">{notification.date}</p>
+                            <p className="text-xs text-gray-500">{formatDate(notification.created_at)}</p>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1 capitalize">{notification.type}</p>
+                          <p className="text-xs text-gray-500 mt-1 capitalize">{notification.notification_type}</p>
                         </div>
                       ))}
                     </div>
