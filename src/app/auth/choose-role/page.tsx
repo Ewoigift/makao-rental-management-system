@@ -42,8 +42,10 @@ export default function ChooseRolePage() {
 
       // Redirect based on role
       if (role === "admin") {
-        router.push("/dashboard");
+        console.log("Selected admin role, redirecting to admin dashboard");
+        router.push("/admin/dashboard");
       } else {
+        console.log("Selected tenant role, redirecting to tenant dashboard");
         router.push("/tenant/dashboard");
       }
     } catch (error: any) {

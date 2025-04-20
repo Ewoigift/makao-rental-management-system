@@ -348,7 +348,8 @@ export default function TenantsPage() {
                     <th className="p-2 border-b text-left">Email</th>
                     <th className="p-2 border-b text-left">Phone</th>
                     <th className="p-2 border-b text-left">Join Date</th>
-                    <th className="p-2 border-b text-left">Unit</th>
+                    <th className="p-2 border-b text-left">PROPERTY</th>
+                    <th className="p-2 border-b text-left">UNIT</th>
                     <th className="p-2 border-b text-right w-24">Actions</th>
                   </tr>
                 </thead>
@@ -386,22 +387,25 @@ export default function TenantsPage() {
                         <span className="text-sm">{formatDate(tenant.created_at)}</span>
                       </td>
                       <td className="p-2 border-b">
-                        {tenant.leases && tenant.leases.length > 0 && tenant.leases[0].unit ? (
-                          <div className="flex items-center gap-1">
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100">
-                              Allocated
-                            </Badge>
-                            <div className="text-sm">
-                              <div>{tenant.leases[0].unit.unit_number}</div>
-                              <div className="text-gray-500">{tenant.leases[0].unit.property?.name}</div>
-                            </div>
-                          </div>
+                        {tenant.leases && tenant.leases.length > 0 && tenant.leases[0].unit?.property ? (
+                          <span className="text-sm font-medium uppercase">
+                            {tenant.leases[0].unit.property.name}
+                          </span>
                         ) : (
-                          <div className="flex items-center">
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100">
-                              Not Allocated
-                            </Badge>
-                          </div>
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100">
+                            UNASSIGNED
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="p-2 border-b">
+                        {tenant.leases && tenant.leases.length > 0 && tenant.leases[0].unit ? (
+                          <span className="text-sm font-medium uppercase">
+                            {tenant.leases[0].unit.unit_number}
+                          </span>
+                        ) : (
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100">
+                            UNASSIGNED
+                          </Badge>
                         )}
                       </td>
                       <td className="p-2 border-b text-right">

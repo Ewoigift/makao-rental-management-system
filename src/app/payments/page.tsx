@@ -34,8 +34,8 @@ import {
   MoreVertical, 
   Search, 
   FileText, 
-  AlertCircle,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 // Using API endpoints instead of direct Supabase calls to avoid CORS issues
@@ -49,7 +49,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
+import { InvoiceDownloadButton } from '@/components/payments/invoice-pdf';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState([]);
@@ -62,6 +63,8 @@ export default function PaymentsPage() {
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [processingAction, setProcessingAction] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
   
   const { user } = useUser();
   
@@ -233,8 +236,6 @@ export default function PaymentsPage() {
     }
   };
   
-  // Status badge already defined above, so removed duplicate declaration
-
   return (
     <MainLayout>
       <div className="container mx-auto py-6">
@@ -320,7 +321,17 @@ export default function PaymentsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setSelectedPayment(payment);
+                                  setIsDetailsDialogOpen(true);
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => window.open(payment.payment_proof_url, '_blank')} disabled={!payment.payment_proof_url}>
+                                <FileText className="h-4 w-4 mr-2" />
                                 View Proof
                               </DropdownMenuItem>
                               <DropdownMenuItem 
@@ -330,6 +341,7 @@ export default function PaymentsPage() {
                                 }}
                                 disabled={payment.status !== 'pending'}
                               >
+                                <CheckCircle className="h-4 w-4 mr-2" />
                                 Verify Payment
                               </DropdownMenuItem>
                               <DropdownMenuItem 
@@ -339,6 +351,7 @@ export default function PaymentsPage() {
                                 }}
                                 disabled={payment.status !== 'pending'}
                                 className="text-red-500">
+                                <XCircle className="h-4 w-4 mr-2" />
                                 Reject Payment
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -469,6 +482,168 @@ export default function PaymentsPage() {
                     Reject Payment
                   </>
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Payment Details Dialog */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Payment Details</DialogTitle>
+              <DialogDescription>
+                View detailed information about this payment
+              </DialogDescription>
+            </DialogHeader>
+            
+            {selectedPayment && (
+              <Tabs defaultValue="details" value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="invoice">Invoice</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="details" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-6 mt-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Tenant</Label>
+                      <p className="font-medium">{selectedPayment.lease?.tenant?.full_name || 'N/A'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Property / Unit</Label>
+                      <p className="font-medium">
+                        {selectedPayment.lease?.unit?.property?.name || 'N/A'} / {selectedPayment.lease?.unit?.unit_number || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Amount</Label>
+                      <p className="font-medium">{formatCurrency(selectedPayment.amount)}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Status</Label>
+                      <div>{getStatusBadge(selectedPayment.status)}</div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Payment Date</Label>
+                      <p className="font-medium">{formatDate(selectedPayment.payment_date)}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Payment Method</Label>
+                      <p className="font-medium">{selectedPayment.payment_method || 'N/A'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Receipt/Reference #</Label>
+                      <p className="font-medium">{selectedPayment.receipt_number || selectedPayment.reference_number || 'N/A'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Payment Period</Label>
+                      <p className="font-medium">
+                        {new Date(selectedPayment.period_start || selectedPayment.payment_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                    
+                    {selectedPayment.notes && (
+                      <div className="col-span-2 space-y-2">
+                        <Label className="text-xs text-gray-500">Notes</Label>
+                        <p className="font-medium">{selectedPayment.notes}</p>
+                      </div>
+                    )}
+                    
+                    {selectedPayment.rejection_reason && (
+                      <div className="col-span-2 space-y-2">
+                        <Label className="text-xs text-gray-500">Rejection Reason</Label>
+                        <p className="font-medium text-red-600">{selectedPayment.rejection_reason}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <div>
+                      {selectedPayment.payment_proof_url && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => window.open(selectedPayment.payment_proof_url, '_blank')}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          View Payment Proof
+                        </Button>
+                      )}
+                    </div>
+                    <div>
+                      {selectedPayment.status === 'pending' && (
+                        <>
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="mr-2 text-red-500 hover:text-red-600"
+                            onClick={() => {
+                              setIsDetailsDialogOpen(false);
+                              setTimeout(() => {
+                                setIsRejectDialogOpen(true);
+                              }, 100);
+                            }}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Reject
+                          </Button>
+                          <Button 
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => {
+                              setIsDetailsDialogOpen(false);
+                              setTimeout(() => {
+                                setIsVerifyDialogOpen(true);
+                              }, 100);
+                            }}
+                          >
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Verify
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="invoice">
+                  <div className="h-[60vh] bg-gray-50 rounded-md p-4 flex flex-col items-center justify-center border">
+                    {/* Convert payment to invoice data */}
+                    {(() => {
+                      const invoiceData = {
+                        id: selectedPayment.id,
+                        invoiceNumber: selectedPayment.receipt_number || `INV-${selectedPayment.id.substring(0, 8).toUpperCase()}`,
+                        issuedDate: selectedPayment.payment_date,
+                        dueDate: selectedPayment.payment_date,
+                        paidDate: selectedPayment.status === 'verified' ? selectedPayment.payment_date : undefined,
+                        status: selectedPayment.status === 'verified' ? 'paid' : 
+                               selectedPayment.status === 'pending' ? 'pending' : 'overdue',
+                        amount: selectedPayment.amount,
+                        tenantName: selectedPayment.lease?.tenant?.full_name || 'Tenant',
+                        tenantEmail: selectedPayment.lease?.tenant?.email,
+                        propertyName: selectedPayment.lease?.unit?.property?.name || 'Property',
+                        unitNumber: selectedPayment.lease?.unit?.unit_number || 'Unit',
+                        landlordName: selectedPayment.lease?.unit?.property?.landlord?.full_name || 'Landlord',
+                        description: `Rent payment for ${selectedPayment.lease?.unit?.unit_number || 'Unit'} at ${selectedPayment.lease?.unit?.property?.name || 'Property'}`,
+                        paymentMethod: selectedPayment.payment_method
+                      };
+                      
+                      return (
+                        <>
+                          <p className="text-gray-500 mb-4">Invoice preview will be shown here.</p>
+                          <InvoiceDownloadButton invoiceData={invoiceData} />
+                        </>
+                      );
+                    })()}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            )}
+            
+            <DialogFooter>
+              <Button onClick={() => setIsDetailsDialogOpen(false)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

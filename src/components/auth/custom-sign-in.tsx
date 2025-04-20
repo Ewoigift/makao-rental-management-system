@@ -36,7 +36,7 @@ export default function CustomSignIn() {
                 card: "rounded-xl shadow-md",
               },
             }}
-            redirectUrl="/protected"
+            redirectUrl="/dashboard"
           />
         </div>
       </div>

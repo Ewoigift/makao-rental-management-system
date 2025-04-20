@@ -3,24 +3,11 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-
-// Types based on Supabase schema
-interface CalendarEvent {
-  id: string;
-  title: string;
-  description?: string;
-  start_date: string;
-  end_date: string;
-  all_day: boolean;
-  event_type: 'lease_start' | 'lease_end' | 'payment_due' | 'maintenance' | 'inspection' | 'other';
-  related_entity_id?: string;
-  related_entity_type?: 'lease' | 'unit' | 'tenant' | 'payment' | 'maintenance';
-  created_at: string;
-  updated_at: string;
-}
+import { CalendarEvent, fetchCalendarEvents, syncMaintenanceToCalendar } from "@/lib/db/calendar-utils";
+import { toast } from "sonner";
 
 interface CalendarDay {
   date: Date;
@@ -34,6 +21,7 @@ export default function CalendarPage() {
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingMaintenance, setSyncingMaintenance] = useState(false);
 
   // Fetch events from Supabase
   useEffect(() => {
@@ -41,25 +29,16 @@ export default function CalendarPage() {
       try {
         setLoading(true);
         
-        // Replace with your actual API call
-        const { supabase } = await import('@/lib/supabase/client');
-        
         // Get start and end of the month for filtering
         const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
         
-        const { data, error } = await supabase
-          .from('calendar_events')
-          .select('*')
-          .gte('start_date', startOfMonth.toISOString())
-          .lte('start_date', endOfMonth.toISOString());
-        
-        if (error) throw error;
-        
-        setEvents(data || []);
+        // Use our utility function instead of direct Supabase calls
+        const eventsData = await fetchCalendarEvents(startOfMonth, endOfMonth);
+        setEvents(eventsData);
       } catch (error) {
         console.error('Error fetching events:', error);
-        // Use sample data if fetch fails
+        toast.error('Failed to load calendar events');
         setEvents([]);
       } finally {
         setLoading(false);
@@ -121,36 +100,53 @@ export default function CalendarPage() {
     setCalendarDays(days);
   }, [currentDate, events]);
 
+  // Function to sync maintenance requests with calendar
+  const handleSyncMaintenance = async () => {
+    setSyncingMaintenance(true);
+    try {
+      await syncMaintenanceToCalendar();
+      
+      // Refresh calendar events after sync
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const eventsData = await fetchCalendarEvents(startOfMonth, endOfMonth);
+      setEvents(eventsData);
+      
+      toast.success('Maintenance schedule synced with calendar');
+    } catch (error) {
+      console.error('Error syncing maintenance:', error);
+      toast.error('Failed to sync maintenance schedule');
+    } finally {
+      setSyncingMaintenance(false);
+    }
+  };
+
   const getMonthName = (date: Date) => {
     return date.toLocaleString('default', { month: 'long' });
   };
 
   const handlePreviousMonth = () => {
-    setCurrentDate(prevDate => {
-      const newDate = new Date(prevDate);
-      newDate.setMonth(prevDate.getMonth() - 1);
-      return newDate;
-    });
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() - 1);
+    setCurrentDate(newDate);
   };
 
   const handleNextMonth = () => {
-    setCurrentDate(prevDate => {
-      const newDate = new Date(prevDate);
-      newDate.setMonth(prevDate.getMonth() + 1);
-      return newDate;
-    });
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() + 1);
+    setCurrentDate(newDate);
   };
 
   const getEventBadge = (eventType: string) => {
     switch (eventType) {
       case 'lease_start':
-        return <Badge className="bg-green-100 text-green-800">New Lease</Badge>;
+        return <Badge className="bg-green-100 text-green-800">Lease Start</Badge>;
       case 'lease_end':
         return <Badge className="bg-red-100 text-red-800">Lease End</Badge>;
       case 'payment_due':
-        return <Badge className="bg-blue-100 text-blue-800">Payment Due</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800">Payment Due</Badge>;
       case 'maintenance':
-        return <Badge className="bg-yellow-100 text-yellow-800">Maintenance</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800">Maintenance</Badge>;
       case 'inspection':
         return <Badge className="bg-purple-100 text-purple-800">Inspection</Badge>;
       default:
@@ -163,10 +159,16 @@ export default function CalendarPage() {
       <div className="container mx-auto py-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Calendar</h1>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Event
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSyncMaintenance} disabled={syncingMaintenance}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${syncingMaintenance ? 'animate-spin' : ''}`} />
+              Sync Maintenance
+            </Button>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              New Event
+            </Button>
+          </div>
         </div>
 
         <Card>

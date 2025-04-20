@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Filter, Search, Loader2, AlertCircle } from 'lucide-react';
+import { Download, Filter, Search, Loader2, AlertCircle, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { getTenantPayments, Payment } from '@/lib/db/payments-utils';
 import { formatDate } from '@/lib/utils/index';
 import { MainLayout } from '@/components/layout/main-layout';
+import { PaymentDetailsModal } from '@/components/payments/payment-details-modal';
+import { InvoiceData, InvoiceDownloadButton } from '@/components/payments/invoice-pdf';
 
 export default function PaymentHistoryPage() {
   const [filter, setFilter] = useState('all');
@@ -18,6 +20,8 @@ export default function PaymentHistoryPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const { user } = useUser();
   
   // Fetch payments from database
@@ -254,32 +258,84 @@ export default function PaymentHistoryPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <Download className="h-4 w-4" />
-                              <span className="sr-only">Download receipt</span>
-                            </Button>
+                            <div className="flex space-x-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0"
+                                onClick={() => {
+                                  setSelectedPayment(payment);
+                                  setIsDetailsModalOpen(true);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                                <span className="sr-only">View details</span>
+                              </Button>
+                              
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const invoiceData: InvoiceData = {
+                                    id: payment.id,
+                                    invoiceNumber: payment.reference_number || `INV-${payment.id.slice(0, 6).toUpperCase()}`,
+                                    issuedDate: payment.payment_date,
+                                    dueDate: payment.payment_date,
+                                    paidDate: payment.status === 'completed' ? payment.payment_date : undefined,
+                                    status: payment.status === 'completed' ? 'paid' : 
+                                           payment.status === 'pending' ? 'pending' : 'overdue',
+                                    amount: payment.amount,
+                                    tenantName: user?.fullName || 'Tenant',
+                                    tenantEmail: user?.primaryEmailAddress?.emailAddress,
+                                    propertyName: payment.lease?.unit?.property?.name || 'Property',
+                                    unitNumber: payment.lease?.unit?.unit_number || 'Unit',
+                                    landlordName: payment.lease?.unit?.property?.landlord?.full_name || 'Landlord',
+                                    description: `Rent payment for ${payment.lease?.unit?.unit_number || 'Unit'} at ${payment.lease?.unit?.property?.name || 'Property'}`,
+                                    paymentMethod: payment.payment_method
+                                  };
+                                  
+                                  // Create a blob URL for the invoice
+                                  const blob = new Blob(
+                                    [JSON.stringify(invoiceData)], 
+                                    { type: 'application/json' }
+                                  );
+                                  const url = URL.createObjectURL(blob);
+                                  
+                                  // Create a link and trigger download
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `invoice-${payment.reference_number || payment.id}.json`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  URL.revokeObjectURL(url);
+                                }}
+                              >
+                                <Download className="h-4 w-4" />
+                                <span className="sr-only">Download receipt</span>
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))
                     ) : (
-                    <tr>
-                      <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
-                        {payments.length === 0 ? 'No payment history found.' : 'No payments found matching your filters.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-        )
-      }
-        
-
+                      <tr>
+                        <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                          {payments.length === 0 ? 'No payment history found.' : 'No payments found matching your filters.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         {/* Payment instructions */}
-        <Card className="bg-blue-50 border-blue-100">
+        <Card className="bg-blue-50 border-blue-100 mt-6">
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
               <div className="flex-1">
@@ -295,6 +351,13 @@ export default function PaymentHistoryPage() {
           </CardContent>
         </Card>
       </div>
+      {/* Payment Details Modal */}
+      <PaymentDetailsModal 
+        payment={selectedPayment} 
+        open={isDetailsModalOpen} 
+        onOpenChange={setIsDetailsModalOpen} 
+      />
     </MainLayout>
+    
   );
 }
